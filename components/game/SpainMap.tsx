@@ -248,6 +248,7 @@ export function SpainMap({
   const [densityStatus, setDensityStatus] = useState<DensityStatus>("idle");
   const [provincesOn, setProvincesOn] = useState(false);
   const [provincesStatus, setProvincesStatus] = useState<ProvincesStatus>("idle");
+  const [provincesAvailable, setProvincesAvailable] = useState(false);
 
   useEffect(() => {
     selectionChangeRef.current = onSelectionChange;
@@ -576,6 +577,25 @@ export function SpainMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Comprueba en silencio si existe public/provincias.geojson (capa opcional,
+  // todavía no generada). Mientras no exista, el interruptor de provincias ni
+  // siquiera aparece: no hay error que mostrar ni que quitar más tarde, solo
+  // se activa solo cuando el fichero esté disponible.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    fetch("/provincias.geojson", { method: "HEAD" })
+      .then((res) => {
+        if (!cancelled) setProvincesAvailable(res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setProvincesAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Redimensionado del canvas al cambiar el tamaño del contenedor
   useEffect(() => {
     const container = containerRef.current;
@@ -848,19 +868,21 @@ export function SpainMap({
                 No se ha podido cargar la densidad.
               </p>
             )}
-            <button
-              type="button"
-              onClick={toggleProvinces}
-              disabled={provincesStatus === "loading"}
-              className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
-            >
-              {provincesStatus === "loading"
-                ? "Cargando provincias…"
-                : provincesOn
-                  ? "Ocultar provincias"
-                  : "Mostrar provincias"}
-            </button>
-            {provincesStatus === "error" && (
+            {provincesAvailable && (
+              <button
+                type="button"
+                onClick={toggleProvinces}
+                disabled={provincesStatus === "loading"}
+                className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
+              >
+                {provincesStatus === "loading"
+                  ? "Cargando provincias…"
+                  : provincesOn
+                    ? "Ocultar provincias"
+                    : "Mostrar provincias"}
+              </button>
+            )}
+            {provincesAvailable && provincesStatus === "error" && (
               <p className="max-w-[220px] text-[11px] text-muted">
                 No se ha podido cargar el contorno de provincias.
               </p>

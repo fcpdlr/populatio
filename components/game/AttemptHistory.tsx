@@ -68,7 +68,10 @@ export function AttemptHistory({ best, attempts }: Props) {
   if (!best && attempts === 0) return null;
   return (
     <div
-      className="grid grid-cols-3 gap-2 px-4 pb-3 sm:px-6"
+      // En pantallas muy bajas (móvil con poco alto útil), esta barra es lo
+      // primero que cede espacio: el objetivo y el botón Comprobar nunca
+      // deben quedar fuera de la vista ni forzar scroll.
+      className="grid grid-cols-3 gap-2 px-4 pb-3 sm:px-6 [@media(max-height:380px)]:hidden"
       role="group"
       aria-label="Estadísticas"
     >
