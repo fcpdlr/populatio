@@ -212,7 +212,7 @@ export function Game() {
       {mounted && state.target > 0 ? (
         <TargetDisplay target={state.target} onNewTarget={handleNewTarget} />
       ) : (
-        <div className="flex flex-col items-center px-4 pb-4 pt-1 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">
+        <div className="flex flex-col items-center px-4 pb-2 pt-1 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">
           <div className="h-[clamp(2.75rem,15vw,4.5rem)] w-56 animate-pulse rounded-2xl bg-line [@media(max-height:380px)]:h-8" />
         </div>
       )}

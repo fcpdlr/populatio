@@ -10,7 +10,7 @@ type Props = {
 
 function ErrorIcon() {
   return (
-    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 20 20" className="h-3 w-3" fill="none" aria-hidden="true">
       <circle cx="10" cy="10" r="6.5" stroke="currentColor" strokeWidth="1.6" />
       <circle cx="10" cy="10" r="1.6" fill="currentColor" />
     </svg>
@@ -19,7 +19,7 @@ function ErrorIcon() {
 
 function AttemptsIcon() {
   return (
-    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 20 20" className="h-3 w-3" fill="none" aria-hidden="true">
       <path
         d="M4 10a6 6 0 0 1 10.2-4.3M16 10a6 6 0 0 1-10.2 4.3M14 4v2.5h-2.5M6 16v-2.5h2.5"
         stroke="currentColor"
@@ -33,7 +33,7 @@ function AttemptsIcon() {
 
 function ScoreIcon() {
   return (
-    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 20 20" className="h-3 w-3" fill="none" aria-hidden="true">
       <path
         d="M6 4h8v3.2a4 4 0 0 1-8 0V4Z"
         stroke="currentColor"
@@ -46,7 +46,7 @@ function ScoreIcon() {
   );
 }
 
-function StatItem({
+function Stat({
   icon,
   label,
   value,
@@ -56,32 +56,34 @@ function StatItem({
   value: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-0.5 rounded-xl border border-line px-2 py-2 text-center">
+    <span className="flex items-center gap-1 whitespace-nowrap">
       <span className="text-accent">{icon}</span>
-      <span className="tabular text-sm font-semibold text-ink">{value}</span>
-      <span className="text-[10px] uppercase tracking-wide text-muted">{label}</span>
-    </div>
+      <span className="tabular font-semibold text-ink">{value}</span>
+      <span>{label}</span>
+    </span>
   );
 }
 
+/**
+ * Barra de stats deliberadamente ligera: una sola línea de texto, no
+ * tarjetas. El mapa es el protagonista de la pantalla; esto es un dato de
+ * apoyo, no debe competirle altura.
+ */
 export function AttemptHistory({ best, attempts }: Props) {
   if (!best && attempts === 0) return null;
   return (
     <div
-      // En pantallas muy bajas (móvil con poco alto útil), esta barra es lo
-      // primero que cede espacio: el objetivo y el botón Comprobar nunca
-      // deben quedar fuera de la vista ni forzar scroll.
-      className="grid grid-cols-3 gap-2 px-4 pb-3 sm:px-6 [@media(max-height:380px)]:hidden"
+      className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 pb-2 text-[11px] text-muted sm:px-6 [@media(max-height:380px)]:hidden"
       role="group"
       aria-label="Estadísticas"
     >
-      <StatItem
+      <Stat
         icon={<ErrorIcon />}
         label="Mejor error"
         value={best ? formatPercent(best.percentageError) : "—"}
       />
-      <StatItem icon={<AttemptsIcon />} label="Intentos" value={formatInt(attempts)} />
-      <StatItem
+      <Stat icon={<AttemptsIcon />} label="Intentos" value={formatInt(attempts)} />
+      <Stat
         icon={<ScoreIcon />}
         label="Mejor puntuación"
         value={best ? formatInt(best.score) : "—"}
