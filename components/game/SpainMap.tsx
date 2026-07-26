@@ -61,6 +61,9 @@ const VIEW_PADDING_PX = 28;
 const MIN_POINT_DISTANCE_PX = 3;
 const SIMPLIFY_TOLERANCE_PX = 3;
 const GOTO_DURATION_MS = 500;
+const MIN_PINCH_DISTANCE_PX = 1;
+const MIN_SCALE_FACTOR = 0.6; // respecto al ajuste inicial a la península
+const MAX_SCALE_FACTOR = 35;
 
 type Camera = { centerLng: number; centerLat: number; scale: number };
 
@@ -158,6 +161,44 @@ function unproject(
   return [lng, lat];
 }
 
+/**
+ * Calcula la cámara (con la escala dada) que deja el punto del mundo
+ * (worldLng, worldLat) proyectado exactamente en el punto de pantalla
+ * (screenX, screenY). Es la base del zoom con gesto de pellizco: se fija el
+ * punto del mundo bajo el punto medio de los dos dedos antes de cambiar el
+ * zoom, y se recoloca la cámara para que siga bajo el punto medio después.
+ */
+function cameraPinnedAt(
+  width: number,
+  height: number,
+  scale: number,
+  worldLng: number,
+  worldLat: number,
+  screenX: number,
+  screenY: number,
+): Camera {
+  return {
+    centerLng: worldLng - (screenX - width / 2) / (scale * REF_COS_LAT),
+    centerLat: worldLat - (height / 2 - screenY) / scale,
+    scale,
+  };
+}
+
+type PointerPoint = { x: number; y: number };
+
+function pinchStateFromPointers(pointers: Map<number, PointerPoint>): {
+  distance: number;
+  midX: number;
+  midY: number;
+} {
+  const [a, b] = pointers.values();
+  return {
+    distance: Math.hypot(b.x - a.x, b.y - a.y),
+    midX: (a.x + b.x) / 2,
+    midY: (a.y + b.y) / 2,
+  };
+}
+
 /** Anillos (arrays de [lng,lat]) de un Polygon o MultiPolygon, aplanados. */
 function ringsOf(geometry: Polygon | MultiPolygon): number[][][] {
   return geometry.type === "Polygon"
@@ -180,6 +221,9 @@ export function SpainMap({
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1 });
+  const baseScaleRef = useRef(1);
+  const pointersRef = useRef<Map<number, PointerPoint>>(new Map());
+  const pinchRef = useRef<{ distance: number; midX: number; midY: number } | null>(null);
   const outlineRef = useRef<Feature<Polygon | MultiPolygon> | null>(null);
   const colorsRef = useRef<ThemeColors>(FALLBACK_COLORS);
   const polygonRef = useRef<Polygon | MultiPolygon | null>(null);
@@ -407,7 +451,9 @@ export function SpainMap({
     const hadSize = sizeRef.current.width > 0;
     sizeRef.current = { width, height };
     if (!hadSize) {
-      cameraRef.current = cameraForBounds(VIEWS.peninsula, width, height);
+      const initialCamera = cameraForBounds(VIEWS.peninsula, width, height);
+      cameraRef.current = initialCamera;
+      baseScaleRef.current = initialCamera.scale;
     }
     draw();
   }, [draw]);
@@ -558,11 +604,81 @@ export function SpainMap({
     [],
   );
 
+  /** Punto del evento en píxeles relativos al canvas (para el seguimiento de pellizco). */
+  const screenPointFromEvent = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): PointerPoint => {
+      const rect = canvasRef.current!.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    },
+    [],
+  );
+
+  const commitDrawnPath = useCallback(() => {
+    const raw = pathRef.current;
+    pathRef.current = [];
+
+    if (raw.length < 3) {
+      polygonRef.current = null;
+      setHasSelection(false);
+      selectionChangeRef.current(null);
+      draw();
+      return;
+    }
+
+    const ring = [...raw, raw[0]].map(([lng, lat]) => [lng, lat]);
+    const toleranceDeg = SIMPLIFY_TOLERANCE_PX / cameraRef.current.scale;
+    let simplifiedRing = ring;
+    try {
+      const simplified = simplify(
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Polygon", coordinates: [ring] },
+        },
+        { tolerance: toleranceDeg, highQuality: true },
+      );
+      const candidate = simplified.geometry.coordinates[0];
+      if (candidate && candidate.length >= 4) simplifiedRing = candidate;
+    } catch {
+      // Si la simplificación falla, se usa el anillo original.
+    }
+
+    const rawPolygon: Polygon = { type: "Polygon", coordinates: [simplifiedRing] };
+    let polygon: Polygon | MultiPolygon = rawPolygon;
+    try {
+      polygon = cleanPolygon(rawPolygon);
+    } catch {
+      // Si la limpieza falla, seguimos con el trazo original.
+    }
+    polygonRef.current = polygon;
+    setHasSelection(true);
+    selectionChangeRef.current(polygon);
+    draw();
+  }, [draw]);
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (disabledRef.current || !mapReady) return;
       e.preventDefault();
-      canvasRef.current?.setPointerCapture(e.pointerId);
+      try {
+        canvasRef.current?.setPointerCapture(e.pointerId);
+      } catch {
+        // Algunos navegadores pueden rechazar la captura; no es crítico.
+      }
+      pointersRef.current.set(e.pointerId, screenPointFromEvent(e));
+
+      if (pointersRef.current.size >= 2) {
+        // Un segundo dedo convierte el gesto en pellizco: se cancela
+        // cualquier trazo de un solo dedo en curso (sin tocar la selección
+        // ya confirmada) y se arranca el seguimiento del pellizco.
+        drawingRef.current = false;
+        pathRef.current = [];
+        pinchRef.current = pinchStateFromPointers(pointersRef.current);
+        draw();
+        return;
+      }
+
+      // Un solo dedo: comportamiento de dibujo habitual.
       polygonRef.current = null;
       pathRef.current = [pointFromEvent(e)];
       drawingRef.current = true;
@@ -570,17 +686,49 @@ export function SpainMap({
       selectionChangeRef.current(null);
       draw();
     },
-    [draw, mapReady, pointFromEvent],
+    [draw, mapReady, pointFromEvent, screenPointFromEvent],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (pointersRef.current.has(e.pointerId)) {
+        pointersRef.current.set(e.pointerId, screenPointFromEvent(e));
+      }
+
+      if (pointersRef.current.size >= 2) {
+        e.preventDefault();
+        const state = pinchStateFromPointers(pointersRef.current);
+        const prev = pinchRef.current;
+        if (
+          prev &&
+          prev.distance > MIN_PINCH_DISTANCE_PX &&
+          state.distance > MIN_PINCH_DISTANCE_PX
+        ) {
+          const { width, height } = sizeRef.current;
+          const camera = cameraRef.current;
+          const rawScale = camera.scale * (state.distance / prev.distance);
+          const minScale = baseScaleRef.current * MIN_SCALE_FACTOR;
+          const maxScale = baseScaleRef.current * MAX_SCALE_FACTOR;
+          const newScale = Math.min(Math.max(rawScale, minScale), maxScale);
+          const [worldLng, worldLat] = unproject(camera, width, height, prev.midX, prev.midY);
+          cameraRef.current = cameraPinnedAt(
+            width,
+            height,
+            newScale,
+            worldLng,
+            worldLat,
+            state.midX,
+            state.midY,
+          );
+        }
+        pinchRef.current = state;
+        draw();
+        return;
+      }
+
       if (!drawingRef.current) return;
       e.preventDefault();
-      const canvas = canvasRef.current;
-      const rect = canvas!.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const { x, y } = screenPointFromEvent(e);
       const path = pathRef.current;
       const { width, height } = sizeRef.current;
       const camera = cameraRef.current;
@@ -593,57 +741,45 @@ export function SpainMap({
       path.push(unproject(camera, width, height, x, y));
       draw();
     },
-    [draw],
+    [draw, screenPointFromEvent],
   );
 
-  const finishDrawing = useCallback(
+  const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!drawingRef.current) return;
-      drawingRef.current = false;
-      canvasRef.current?.releasePointerCapture(e.pointerId);
+      try {
+        canvasRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        // El navegador puede haber liberado ya la captura; no es crítico.
+      }
+      pointersRef.current.delete(e.pointerId);
 
-      const raw = pathRef.current;
-      pathRef.current = [];
+      if (pointersRef.current.size >= 2) {
+        // Sigue habiendo pellizco con los dedos restantes: resincroniza la
+        // referencia para que el próximo movimiento no salte.
+        pinchRef.current = pinchStateFromPointers(pointersRef.current);
+        return;
+      }
 
-      if (raw.length < 3) {
-        polygonRef.current = null;
-        setHasSelection(false);
-        selectionChangeRef.current(null);
+      const wasPinching = pinchRef.current !== null;
+      pinchRef.current = null;
+
+      if (pointersRef.current.size === 1) {
+        // Quedó un dedo tras un pellizco: no reanudamos el dibujo con él
+        // (evita un salto brusco). Hay que soltar y volver a apoyar.
+        return;
+      }
+
+      if (wasPinching || !drawingRef.current) {
+        drawingRef.current = false;
+        pathRef.current = [];
         draw();
         return;
       }
 
-      const ring = [...raw, raw[0]].map(([lng, lat]) => [lng, lat]);
-      const toleranceDeg = SIMPLIFY_TOLERANCE_PX / cameraRef.current.scale;
-      let simplifiedRing = ring;
-      try {
-        const simplified = simplify(
-          {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "Polygon", coordinates: [ring] },
-          },
-          { tolerance: toleranceDeg, highQuality: true },
-        );
-        const candidate = simplified.geometry.coordinates[0];
-        if (candidate && candidate.length >= 4) simplifiedRing = candidate;
-      } catch {
-        // Si la simplificación falla, se usa el anillo original.
-      }
-
-      const rawPolygon: Polygon = { type: "Polygon", coordinates: [simplifiedRing] };
-      let polygon: Polygon | MultiPolygon = rawPolygon;
-      try {
-        polygon = cleanPolygon(rawPolygon);
-      } catch {
-        // Si la limpieza falla, seguimos con el trazo original.
-      }
-      polygonRef.current = polygon;
-      setHasSelection(true);
-      selectionChangeRef.current(polygon);
-      draw();
+      drawingRef.current = false;
+      commitDrawnPath();
     },
-    [draw],
+    [commitDrawnPath, draw],
   );
 
   const goTo = useCallback(
@@ -665,8 +801,8 @@ export function SpainMap({
           style={{ display: "block", cursor: disabled ? "default" : "crosshair" }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={finishDrawing}
-          onPointerCancel={finishDrawing}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
         />
       </div>
 
