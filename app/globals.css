@@ -23,6 +23,7 @@
   --color-map-sea: #eaf1f2;
   --color-map-land: #f6f4ee;
   --color-map-land-line: #dedbd0;
+  --color-province-line: #c9ccce;
   --shadow-btn: 0 6px 18px rgba(14, 92, 84, 0.28);
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
   --font-display: var(--font-bricolage), system-ui, sans-serif;

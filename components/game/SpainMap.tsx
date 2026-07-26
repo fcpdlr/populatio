@@ -6,6 +6,7 @@ import simplify from "@turf/simplify";
 import { DrawingControls } from "./DrawingControls";
 import { cleanPolygon } from "@/lib/geo/clean";
 import { loadDensityGrid, type DensityGrid } from "@/lib/population/densityGrid";
+import { loadProvinceLines, type ProvinceGeometries } from "@/lib/geo/provinces";
 
 export type SpainMapProps = {
   /** Se invoca con la geometría dibujada, o null si no hay selección. */
@@ -22,6 +23,7 @@ export type SpainMapProps = {
 };
 
 type DensityStatus = "idle" | "loading" | "ready" | "error";
+type ProvincesStatus = "idle" | "loading" | "ready" | "error";
 
 type LngLat = readonly [number, number];
 type Bounds = readonly [LngLat, LngLat]; // [suroeste, noreste]
@@ -74,6 +76,7 @@ type ThemeColors = {
   mapLand: string;
   mapLandLine: string;
   densityRgb: string;
+  provinceLine: string;
 };
 
 const FALLBACK_COLORS: ThemeColors = {
@@ -88,6 +91,7 @@ const FALLBACK_COLORS: ThemeColors = {
   mapLand: "#f6f4ee",
   mapLandLine: "#dedbd0",
   densityRgb: "44, 55, 66",
+  provinceLine: "#c9ccce",
 };
 
 function readThemeColors(): ThemeColors {
@@ -109,6 +113,7 @@ function readThemeColors(): ThemeColors {
     mapLand: read("--color-map-land", FALLBACK_COLORS.mapLand),
     mapLandLine: read("--color-map-land-line", FALLBACK_COLORS.mapLandLine),
     densityRgb: read("--map-density-rgb", FALLBACK_COLORS.densityRgb),
+    provinceLine: read("--color-province-line", FALLBACK_COLORS.provinceLine),
   };
 }
 
@@ -189,12 +194,16 @@ export function SpainMap({
   const densityBinsRef = useRef<{ cols: number; rows: number; sums: Float64Array } | null>(
     null,
   );
+  const provincesDataRef = useRef<ProvinceGeometries | null>(null);
+  const provincesOnRef = useRef(false);
 
   const [hasSelection, setHasSelection] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [densityOn, setDensityOn] = useState(false);
   const [densityStatus, setDensityStatus] = useState<DensityStatus>("idle");
+  const [provincesOn, setProvincesOn] = useState(false);
+  const [provincesStatus, setProvincesStatus] = useState<ProvincesStatus>("idle");
 
   useEffect(() => {
     selectionChangeRef.current = onSelectionChange;
@@ -296,6 +305,25 @@ export function SpainMap({
           }
         }
       }
+    }
+
+    // Líneas de provincia (opcionales, apagadas por defecto): por encima de
+    // la tierra y la densidad, pero por debajo de la selección del usuario.
+    const provinces = provincesDataRef.current;
+    if (provincesOnRef.current && provinces) {
+      ctx.beginPath();
+      for (const geometry of provinces) {
+        for (const ring of ringsOf(geometry)) {
+          ring.forEach(([lng, lat], idx) => {
+            const [x, y] = proj(lng, lat);
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+        }
+      }
+      ctx.strokeStyle = colors.provinceLine;
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
 
     // Selección cerrada
@@ -434,6 +462,28 @@ export function SpainMap({
     setDensityStatus("ready");
     densityOnRef.current = true;
     setDensityOn(true);
+    draw();
+  }, [draw]);
+
+  const toggleProvinces = useCallback(async () => {
+    if (provincesOnRef.current) {
+      provincesOnRef.current = false;
+      setProvincesOn(false);
+      draw();
+      return;
+    }
+    if (!provincesDataRef.current) {
+      setProvincesStatus("loading");
+      try {
+        provincesDataRef.current = await loadProvinceLines();
+      } catch {
+        setProvincesStatus("error");
+        return;
+      }
+    }
+    setProvincesStatus("ready");
+    provincesOnRef.current = true;
+    setProvincesOn(true);
     draw();
   }, [draw]);
 
@@ -642,25 +692,44 @@ export function SpainMap({
             disabled={disabled}
             onClear={clearSelection}
           />
-          {showDensityToggle && (
+          <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+            {showDensityToggle && (
+              <button
+                type="button"
+                onClick={toggleDensity}
+                disabled={densityStatus === "loading"}
+                className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
+              >
+                {densityStatus === "loading"
+                  ? "Cargando densidad…"
+                  : densityOn
+                    ? "Ver mapa sin densidad"
+                    : "Ver densidad"}
+              </button>
+            )}
+            {densityStatus === "error" && (
+              <p className="max-w-[220px] text-[11px] text-muted">
+                No se ha podido cargar la densidad.
+              </p>
+            )}
             <button
               type="button"
-              onClick={toggleDensity}
-              disabled={densityStatus === "loading"}
-              className="absolute left-3 top-3 rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
+              onClick={toggleProvinces}
+              disabled={provincesStatus === "loading"}
+              className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
             >
-              {densityStatus === "loading"
-                ? "Cargando densidad…"
-                : densityOn
-                  ? "Ver mapa sin densidad"
-                  : "Ver densidad"}
+              {provincesStatus === "loading"
+                ? "Cargando provincias…"
+                : provincesOn
+                  ? "Ocultar provincias"
+                  : "Mostrar provincias"}
             </button>
-          )}
-          {densityStatus === "error" && (
-            <p className="absolute left-3 top-11 max-w-[220px] text-[11px] text-muted">
-              No se ha podido cargar la densidad.
-            </p>
-          )}
+            {provincesStatus === "error" && (
+              <p className="max-w-[220px] text-[11px] text-muted">
+                No se ha podido cargar el contorno de provincias.
+              </p>
+            )}
+          </div>
           <div
             className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
             role="group"
