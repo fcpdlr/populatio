@@ -1,0 +1,401 @@
+{
+  "generatedAt": "2026-07-15T06:04:06.138Z",
+  "populationYear": 2023,
+  "geometrySource": "IGN — Equipamiento Geográfico de Referencia Nacional, vía es-atlas 0.6.0 (TopoJSON simplificado, MIT)",
+  "populationSource": "INE — Cifras oficiales de población de los municipios (Padrón, revisión 1/1/2023). Ver data/raw/FUENTES.md",
+  "rawGeometryCount": 8213,
+  "populationRowCount": 8131,
+  "geometriesWithoutPopulation": [
+    {
+      "code": "53005",
+      "name": "Comunidad de Los Ausines y Revilla del Campo"
+    },
+    {
+      "code": "53006",
+      "name": "Comunidad de Barbadillo de Herreros y Vallejimeno (E.L.M.)"
+    },
+    {
+      "code": "53007",
+      "name": "Comunidad de 09076, 09290, 09578, 09606 y 09822"
+    },
+    {
+      "code": "53008",
+      "name": "Comunidad de 09076, 09290, 09578 y 09822"
+    },
+    {
+      "code": "53032",
+      "name": "Comunidad de Palacios de la Sierra, Vilviestre del Pinar y San Leonardo de Yagüe"
+    },
+    {
+      "code": "53009",
+      "name": "Cabeza Alta"
+    },
+    {
+      "code": "53033",
+      "name": "Comunidad de Quintanaortuño y Merindad de Río Ubierna"
+    },
+    {
+      "code": "53034",
+      "name": "Comunidad de Quintanar de la Sierra y Vilviestre del Pinar"
+    },
+    {
+      "code": "53035",
+      "name": "Comunidad de Revilla del Campo y Torrelara"
+    },
+    {
+      "code": "53036",
+      "name": "Ledanía de Castrillo de la Reina, Hacinas y Salas de los Infantes"
+    },
+    {
+      "code": "53037",
+      "name": "Comunidad de la Aynosa"
+    },
+    {
+      "code": "53038",
+      "name": "Comunidad de Villagalijo y San Vicente del Valle"
+    },
+    {
+      "code": "53039",
+      "name": "Comunidad de Tardajos y Las Quintanillas"
+    },
+    {
+      "code": "53010",
+      "name": "Comunidad de 09076, 09150 y 09578"
+    },
+    {
+      "code": "53040",
+      "name": "Comunidad de Tardajos y Rabé de las Calzadas"
+    },
+    {
+      "code": "53049",
+      "name": "Comunero de Ansó y Hecho"
+    },
+    {
+      "code": "53041",
+      "name": "Comunidad de Tinieblas de la Sierra y San Millán de Lara"
+    },
+    {
+      "code": "53042",
+      "name": "Comunidad de Vilviestre del Pinar y Palacios de la Sierra"
+    },
+    {
+      "code": "53043",
+      "name": "Comunidad de Villoruebo y Torrelara"
+    },
+    {
+      "code": "53044",
+      "name": "Comunidad de Vizcaínos y Jaramillo de la Fuente"
+    },
+    {
+      "code": "53045",
+      "name": "Comunidad de Quintanilla del Agua y Tordueles y Puentedura"
+    },
+    {
+      "code": "53046",
+      "name": "Comunidad de Merindad de Río Ubierna, Quintanilla Vivar y Sotragero"
+    },
+    {
+      "code": "53075",
+      "name": "San Bartolomé"
+    },
+    {
+      "code": "53050",
+      "name": "Cuarto del Madroño"
+    },
+    {
+      "code": "53076",
+      "name": "Comunidad de la Pardina del Mercadal"
+    },
+    {
+      "code": "53077",
+      "name": "El Franco"
+    },
+    {
+      "code": "53011",
+      "name": "Comunidad de 09076, 09498 y 09578"
+    },
+    {
+      "code": "53012",
+      "name": "Comunidad de 09076, 09578, 09606 y 09822"
+    },
+    {
+      "code": "53013",
+      "name": "Comunidad de Barbadillo del Pez y Jaramillo de la Fuente"
+    },
+    {
+      "code": "53014",
+      "name": "Comunidad de Barbadillo del Pez y Riocavado de la Sierra"
+    },
+    {
+      "code": "53015",
+      "name": "Comunidad de Bascuñana y Viloria de Rioja"
+    },
+    {
+      "code": "53016",
+      "name": "Monte Revenga"
+    },
+    {
+      "code": "53017",
+      "name": "Comunidad de Canicosa de la Sierra y Vilviestre del Pinar"
+    },
+    {
+      "code": "53018",
+      "name": "Comunidad de Canicosa de la Sierra y Casarejos"
+    },
+    {
+      "code": "53019",
+      "name": "Soncarazo"
+    },
+    {
+      "code": "53020",
+      "name": "Comunidad de Fuente Carazo"
+    },
+    {
+      "code": "53072",
+      "name": "Comunidad de Campoo y Cabuérniga"
+    },
+    {
+      "code": "53027",
+      "name": "Ledanía de Hacinas y Salas de los Infantes"
+    },
+    {
+      "code": "53028",
+      "name": "Ledanía de Hacinas, Salas de los Infantes y Villanueva de Carazo"
+    },
+    {
+      "code": "53004",
+      "name": "Comunidad de Arauzo de Miel y Huerta del Rey"
+    },
+    {
+      "code": "53021",
+      "name": "Ledanía de 09162, 09290, 09412 y 09606"
+    },
+    {
+      "code": "53022",
+      "name": "Dehesa de San Felices"
+    },
+    {
+      "code": "53023",
+      "name": "Comunidad de Cilleruelo de Arriba y Pineda Trasmonte"
+    },
+    {
+      "code": "53029",
+      "name": "Comunidad de 09314, 09374, 09356 y 09126"
+    },
+    {
+      "code": "53024",
+      "name": "Comunidad de Covarrubias, Quintanilla del Coco y Retuerta"
+    },
+    {
+      "code": "53025",
+      "name": "Comunidad de Cubillo del Campo y Hontoria de la Cantera"
+    },
+    {
+      "code": "53026",
+      "name": "Comunidad de Gete y Hacinas"
+    },
+    {
+      "code": "53031",
+      "name": "Valle de las Venadas"
+    },
+    {
+      "code": "53073",
+      "name": "Monte de la Mata"
+    },
+    {
+      "code": "53051",
+      "name": "Comunidad de Castrotierra de la Valduerna"
+    },
+    {
+      "code": "53052",
+      "name": "Foncabada"
+    },
+    {
+      "code": "53053",
+      "name": "Comunidad de Soto de la Vega y Villazala"
+    },
+    {
+      "code": "53054",
+      "name": "Mancomunidad de Villagatón y Quintana del Castillo"
+    },
+    {
+      "code": "53071",
+      "name": "Coto Mancomunado"
+    },
+    {
+      "code": "53074",
+      "name": "Comunidad de Sepúlveda y Riaza"
+    },
+    {
+      "code": "53003",
+      "name": "Dehesa de Santiago"
+    },
+    {
+      "code": "53047",
+      "name": "Aldovera"
+    },
+    {
+      "code": "53055",
+      "name": "Comunidad de El Pont de Bar y Cava"
+    },
+    {
+      "code": "53083",
+      "name": "Facería de Cogullo Alto, Cogullo Bajo, Sarmindieta y Chandivar"
+    },
+    {
+      "code": "53057",
+      "name": "Los Baldios"
+    },
+    {
+      "code": "53058",
+      "name": "El Redegüelo"
+    },
+    {
+      "code": "53067",
+      "name": "Comunidad del Valle de Salazar"
+    },
+    {
+      "code": "53068",
+      "name": "Facero de Aristregui"
+    },
+    {
+      "code": "53069",
+      "name": "Facero de Ujué y Lerga"
+    },
+    {
+      "code": "53070",
+      "name": "Facería de Ayarza"
+    },
+    {
+      "code": "53078",
+      "name": "Bardenas Reales"
+    },
+    {
+      "code": "53059",
+      "name": "Facero de Uzamalarre"
+    },
+    {
+      "code": "53060",
+      "name": "Facería de Arambelza"
+    },
+    {
+      "code": "53061",
+      "name": "Mancomunidad de Beunza y Juarbe"
+    },
+    {
+      "code": "53062",
+      "name": "Comunidad de Barbarín y Olejúa"
+    },
+    {
+      "code": "53080",
+      "name": "Sierra de Aralar"
+    },
+    {
+      "code": "53081",
+      "name": "Sierra de Lokiz"
+    },
+    {
+      "code": "53063",
+      "name": "Monte Comunal de las Limitaciones de las Améscoas"
+    },
+    {
+      "code": "53064",
+      "name": "Facería de Ezcabarte y otros"
+    },
+    {
+      "code": "53065",
+      "name": "Facería de Aldape"
+    },
+    {
+      "code": "53066",
+      "name": "Facería de Montejurra"
+    },
+    {
+      "code": "53001",
+      "name": "Comunidad de la Sierra Brava de Badaya"
+    },
+    {
+      "code": "53002",
+      "name": "Parzoneria de Entzia"
+    },
+    {
+      "code": "53048",
+      "name": "Mancomunidad de Amezketa y Ordizia"
+    },
+    {
+      "code": "53000",
+      "name": "Parzonería general de Guipuzkoa y Araba/Álava"
+    },
+    {
+      "code": "53056",
+      "name": "Mancomunidad de Nalda, Sorzano y Viguera"
+    },
+    {
+      "code": "54006",
+      "name": "Gibraltar"
+    }
+  ],
+  "populationWithoutGeometry": [],
+  "duplicateGeometryCodes": [],
+  "invalidGeometries": [
+    {
+      "code": "41028",
+      "reason": "área nula"
+    },
+    {
+      "code": "50156",
+      "reason": "área nula"
+    },
+    {
+      "code": "46066",
+      "reason": "área nula"
+    },
+    {
+      "code": "45138",
+      "reason": "área nula"
+    },
+    {
+      "code": "08215",
+      "reason": "área nula"
+    },
+    {
+      "code": "08174",
+      "reason": "área nula"
+    },
+    {
+      "code": "17046",
+      "reason": "área nula"
+    },
+    {
+      "code": "03017",
+      "reason": "área nula"
+    },
+    {
+      "code": "03109",
+      "reason": "área nula"
+    },
+    {
+      "code": "12067",
+      "reason": "área nula"
+    },
+    {
+      "code": "46117",
+      "reason": "área nula"
+    },
+    {
+      "code": "46152",
+      "reason": "área nula"
+    }
+  ],
+  "zeroPopulationMunicipalities": [],
+  "outOfRangeCoordinates": [],
+  "selfIntersectingGeometries": 240,
+  "outputMunicipalityCount": 8119,
+  "totalPopulationIncluded": 48067474,
+  "officialTotalPopulation": 48085361,
+  "populationCoveragePct": 99.963,
+  "fileSizes": {
+    "municipalities.optimized.geojson": 4008675,
+    "municipalities.index.json": 975546
+  }
+}

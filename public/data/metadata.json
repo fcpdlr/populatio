@@ -1,0 +1,10 @@
+{
+  "populationYear": 2023,
+  "populationSource": "INE — Cifras oficiales de población de los municipios (Padrón, revisión 1/1/2023). Ver data/raw/FUENTES.md",
+  "geometrySource": "IGN — Equipamiento Geográfico de Referencia Nacional, vía es-atlas 0.6.0 (TopoJSON simplificado, MIT)",
+  "generatedAt": "2026-07-15T06:04:06.138Z",
+  "municipalityCount": 8119,
+  "totalPopulation": 48067474,
+  "officialTotalPopulation": 48085361,
+  "schemaVersion": 1
+}
