@@ -223,6 +223,7 @@ export function Game() {
           onSelectionChange={handleSelectionChange}
           resetSignal={resetSignal}
           disabled={checking || state.phase === "data-error"}
+          showDensityToggle={Boolean(showResult)}
         />
 
         {/* Estado de carga de datos */}

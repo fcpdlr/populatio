@@ -1,6 +1,10 @@
 /// <reference lib="webworker" />
 import type { Polygon, MultiPolygon } from "geojson";
-import { GridEstimator, type GridMeta } from "@/lib/population/gridEstimator";
+import {
+  GridEstimator,
+  parseGridMeta,
+  type RawGridMeta,
+} from "@/lib/population/gridEstimator";
 import type { PopulationEstimate } from "@/lib/population/types";
 
 export type WorkerRequest =
@@ -12,16 +16,6 @@ export type WorkerResponse =
   | { type: "init-error"; message: string }
   | { type: "estimate-result"; id: number; estimate: PopulationEstimate }
   | { type: "estimate-error"; id: number; message: string };
-
-/** Forma de public/rejilla_meta.json (ver README para el formato del binario). */
-type RawGridMeta = {
-  min_lng: number;
-  min_lat: number;
-  step_lng: number;
-  step_lat: number;
-  count: number;
-  total_pob: number;
-};
 
 let estimator: GridEstimator | null = null;
 
@@ -35,14 +29,7 @@ async function init(): Promise<void> {
       throw new Error("No se han podido descargar los datos de población.");
     }
     const raw = (await metaRes.json()) as RawGridMeta;
-    const meta: GridMeta = {
-      minLng: raw.min_lng,
-      minLat: raw.min_lat,
-      stepLng: raw.step_lng,
-      stepLat: raw.step_lat,
-      count: raw.count,
-      totalPopulation: raw.total_pob,
-    };
+    const meta = parseGridMeta(raw);
     const buffer = await dataRes.arrayBuffer();
 
     estimator = new GridEstimator(buffer, meta);

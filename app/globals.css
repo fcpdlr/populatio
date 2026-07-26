@@ -29,6 +29,12 @@
   --font-body: var(--font-inter), system-ui, sans-serif;
 }
 
+:root {
+  /* gris oscuro de la capa de densidad (solo en el resultado), como tripleta
+     r,g,b para poder componer la opacidad por celda en el canvas */
+  --map-density-rgb: 44, 55, 66;
+}
+
 html,
 body {
   height: 100%;

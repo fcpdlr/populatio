@@ -15,6 +15,61 @@ export type GridMeta = {
   totalPopulation: number;
 };
 
+/** Forma cruda de public/rejilla_meta.json. */
+export type RawGridMeta = {
+  min_lng: number;
+  min_lat: number;
+  step_lng: number;
+  step_lat: number;
+  count: number;
+  total_pob: number;
+};
+
+export function parseGridMeta(raw: RawGridMeta): GridMeta {
+  return {
+    minLng: raw.min_lng,
+    minLat: raw.min_lat,
+    stepLng: raw.step_lng,
+    stepLat: raw.step_lat,
+    count: raw.count,
+    totalPopulation: raw.total_pob,
+  };
+}
+
+export type GridCells = {
+  lngs: Float64Array;
+  lats: Float64Array;
+  pops: Uint32Array;
+};
+
+/** Decodifica el binario de la rejilla (8 bytes/celda) en arrays paralelos. */
+export function parseGridBinary(buffer: ArrayBuffer, meta: GridMeta): GridCells {
+  const expectedBytes = meta.count * CELL_BYTES;
+  if (buffer.byteLength !== expectedBytes) {
+    throw new Error(
+      `Rejilla incoherente: se esperaban ${meta.count} celdas ` +
+        `(${expectedBytes} bytes) y el fichero tiene ${buffer.byteLength} bytes.`,
+    );
+  }
+
+  const view = new DataView(buffer);
+  const n = meta.count;
+  const lngs = new Float64Array(n);
+  const lats = new Float64Array(n);
+  const pops = new Uint32Array(n);
+
+  for (let k = 0; k < n; k++) {
+    const offset = k * CELL_BYTES;
+    const i = view.getUint16(offset, true);
+    const j = view.getUint16(offset + 2, true);
+    lngs[k] = meta.minLng + i * meta.stepLng;
+    lats[k] = meta.minLat + j * meta.stepLat;
+    pops[k] = view.getUint32(offset + 4, true);
+  }
+
+  return { lngs, lats, pops };
+}
+
 /**
  * Estimador por rejilla de población.
  *
@@ -35,28 +90,10 @@ export class GridEstimator implements PopulationEstimator {
   private readonly pops: Uint32Array;
 
   constructor(buffer: ArrayBuffer, meta: GridMeta) {
-    const expectedBytes = meta.count * CELL_BYTES;
-    if (buffer.byteLength !== expectedBytes) {
-      throw new Error(
-        `Rejilla incoherente: se esperaban ${meta.count} celdas ` +
-          `(${expectedBytes} bytes) y el fichero tiene ${buffer.byteLength} bytes.`,
-      );
-    }
-
-    const view = new DataView(buffer);
-    const n = meta.count;
-    this.lngs = new Float64Array(n);
-    this.lats = new Float64Array(n);
-    this.pops = new Uint32Array(n);
-
-    for (let k = 0; k < n; k++) {
-      const offset = k * CELL_BYTES;
-      const i = view.getUint16(offset, true);
-      const j = view.getUint16(offset + 2, true);
-      this.lngs[k] = meta.minLng + i * meta.stepLng;
-      this.lats[k] = meta.minLat + j * meta.stepLat;
-      this.pops[k] = view.getUint32(offset + 4, true);
-    }
+    const { lngs, lats, pops } = parseGridBinary(buffer, meta);
+    this.lngs = lngs;
+    this.lats = lats;
+    this.pops = pops;
   }
 
   get cellCount(): number {

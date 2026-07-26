@@ -5,6 +5,7 @@ import type { Feature, Polygon, MultiPolygon } from "geojson";
 import simplify from "@turf/simplify";
 import { DrawingControls } from "./DrawingControls";
 import { cleanPolygon } from "@/lib/geo/clean";
+import { loadDensityGrid, type DensityGrid } from "@/lib/population/densityGrid";
 
 export type SpainMapProps = {
   /** Se invoca con la geometría dibujada, o null si no hay selección. */
@@ -13,7 +14,14 @@ export type SpainMapProps = {
   resetSignal?: number;
   /** Deshabilita el dibujo (p. ej. mientras se calcula). */
   disabled?: boolean;
+  /**
+   * Permite mostrar el interruptor de densidad de población (solo tiene
+   * sentido en la pantalla de resultado; nunca durante el dibujo).
+   */
+  showDensityToggle?: boolean;
 };
+
+type DensityStatus = "idle" | "loading" | "ready" | "error";
 
 type LngLat = readonly [number, number];
 type Bounds = readonly [LngLat, LngLat]; // [suroeste, noreste]
@@ -65,6 +73,7 @@ type ThemeColors = {
   mapSea: string;
   mapLand: string;
   mapLandLine: string;
+  densityRgb: string;
 };
 
 const FALLBACK_COLORS: ThemeColors = {
@@ -78,6 +87,7 @@ const FALLBACK_COLORS: ThemeColors = {
   mapSea: "#eaf1f2",
   mapLand: "#f6f4ee",
   mapLandLine: "#dedbd0",
+  densityRgb: "44, 55, 66",
 };
 
 function readThemeColors(): ThemeColors {
@@ -98,6 +108,7 @@ function readThemeColors(): ThemeColors {
     mapSea: read("--color-map-sea", FALLBACK_COLORS.mapSea),
     mapLand: read("--color-map-land", FALLBACK_COLORS.mapLand),
     mapLandLine: read("--color-map-land-line", FALLBACK_COLORS.mapLandLine),
+    densityRgb: read("--map-density-rgb", FALLBACK_COLORS.densityRgb),
   };
 }
 
@@ -157,6 +168,7 @@ export function SpainMap({
   onSelectionChange,
   resetSignal = 0,
   disabled = false,
+  showDensityToggle = false,
 }: SpainMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -171,10 +183,18 @@ export function SpainMap({
   const animRef = useRef<number | null>(null);
   const selectionChangeRef = useRef(onSelectionChange);
   const disabledRef = useRef(disabled);
+  const densityGridRef = useRef<DensityGrid | null>(null);
+  const densityOnRef = useRef(false);
+  const densityAllowedRef = useRef(showDensityToggle);
+  const densityBinsRef = useRef<{ cols: number; rows: number; sums: Float64Array } | null>(
+    null,
+  );
 
   const [hasSelection, setHasSelection] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [densityOn, setDensityOn] = useState(false);
+  const [densityStatus, setDensityStatus] = useState<DensityStatus>("idle");
 
   useEffect(() => {
     selectionChangeRef.current = onSelectionChange;
@@ -214,6 +234,69 @@ export function SpainMap({
     ctx.strokeStyle = colors.mapLandLine;
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Densidad de población (solo en el resultado, nunca durante el dibujo).
+    // Se agrega la población en una rejilla de píxeles antes de pintar: así
+    // cada celda contribuye una sola vez por bin y no se satura de negro por
+    // el solape de miles de celdas de 1 km superpuestas en pantalla.
+    const density = densityGridRef.current;
+    if (densityAllowedRef.current && densityOnRef.current && density) {
+      const { lngs, lats, pops } = density;
+      const BIN_PX = 3;
+      const cols = Math.max(1, Math.ceil(width / BIN_PX));
+      const rows = Math.max(1, Math.ceil(height / BIN_PX));
+
+      let bins = densityBinsRef.current;
+      if (!bins || bins.cols !== cols || bins.rows !== rows) {
+        bins = { cols, rows, sums: new Float64Array(cols * rows) };
+        densityBinsRef.current = bins;
+      } else {
+        bins.sums.fill(0);
+      }
+
+      // Límites visibles actuales (con margen), para no iterar celdas fuera de pantalla.
+      const [aLng, aLat] = unproject(camera, width, height, -20, height + 20);
+      const [bLng, bLat] = unproject(camera, width, height, width + 20, -20);
+      const minLng = Math.min(aLng, bLng);
+      const maxLng = Math.max(aLng, bLng);
+      const minLat = Math.min(aLat, bLat);
+      const maxLat = Math.max(aLat, bLat);
+
+      let maxBin = 0;
+      const { sums } = bins;
+      for (let k = 0; k < pops.length; k++) {
+        const pop = pops[k];
+        if (pop === 0) continue;
+        const lng = lngs[k];
+        if (lng < minLng || lng > maxLng) continue;
+        const lat = lats[k];
+        if (lat < minLat || lat > maxLat) continue;
+        const [x, y] = proj(lng, lat);
+        const col = Math.floor(x / BIN_PX);
+        const row = Math.floor(y / BIN_PX);
+        if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+        const idx = row * cols + col;
+        const sum = sums[idx] + pop;
+        sums[idx] = sum;
+        if (sum > maxBin) maxBin = sum;
+      }
+
+      if (maxBin > 0) {
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const sum = sums[row * cols + col];
+            if (sum <= 0) continue;
+            const intensity = Math.sqrt(sum / maxBin);
+            const cx = col * BIN_PX + BIN_PX / 2;
+            const cy = row * BIN_PX + BIN_PX / 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 0.5 + 1.4 * intensity, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${colors.densityRgb}, ${(0.08 + 0.6 * intensity).toFixed(3)})`;
+            ctx.fill();
+          }
+        }
+      }
+    }
 
     // Selección cerrada
     const polygon = polygonRef.current;
@@ -331,6 +414,40 @@ export function SpainMap({
     selectionChangeRef.current(null);
     draw();
   }, [draw]);
+
+  const toggleDensity = useCallback(async () => {
+    if (densityOnRef.current) {
+      densityOnRef.current = false;
+      setDensityOn(false);
+      draw();
+      return;
+    }
+    if (!densityGridRef.current) {
+      setDensityStatus("loading");
+      try {
+        densityGridRef.current = await loadDensityGrid();
+      } catch {
+        setDensityStatus("error");
+        return;
+      }
+    }
+    setDensityStatus("ready");
+    densityOnRef.current = true;
+    setDensityOn(true);
+    draw();
+  }, [draw]);
+
+  // La densidad solo puede mostrarse en el resultado: al salir de esa fase
+  // (nuevo intento, nuevo objetivo, o borrar la selección) se apaga y se
+  // vuelve a exigir una activación explícita la próxima vez.
+  useEffect(() => {
+    densityAllowedRef.current = showDensityToggle;
+    if (!showDensityToggle) {
+      densityOnRef.current = false;
+      setDensityOn(false);
+    }
+    draw();
+  }, [showDensityToggle, draw]);
 
   // Carga del contorno de España y arranque del canvas
   useEffect(() => {
@@ -525,6 +642,25 @@ export function SpainMap({
             disabled={disabled}
             onClear={clearSelection}
           />
+          {showDensityToggle && (
+            <button
+              type="button"
+              onClick={toggleDensity}
+              disabled={densityStatus === "loading"}
+              className="absolute left-3 top-3 rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
+            >
+              {densityStatus === "loading"
+                ? "Cargando densidad…"
+                : densityOn
+                  ? "Ver mapa sin densidad"
+                  : "Ver densidad"}
+            </button>
+          )}
+          {densityStatus === "error" && (
+            <p className="absolute left-3 top-11 max-w-[220px] text-[11px] text-muted">
+              No se ha podido cargar la densidad.
+            </p>
+          )}
           <div
             className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
             role="group"
