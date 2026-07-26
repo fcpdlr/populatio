@@ -212,8 +212,8 @@ export function Game() {
       {mounted && state.target > 0 ? (
         <TargetDisplay target={state.target} onNewTarget={handleNewTarget} />
       ) : (
-        <div className="px-4 pb-3 sm:px-6">
-          <div className="h-8 w-72 animate-pulse rounded bg-line sm:h-10" />
+        <div className="flex flex-col items-center px-4 pb-4 pt-1 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">
+          <div className="h-[clamp(2.75rem,15vw,4.5rem)] w-56 animate-pulse rounded-2xl bg-line [@media(max-height:380px)]:h-8" />
         </div>
       )}
       <AttemptHistory best={state.best} attempts={state.attempts} />
