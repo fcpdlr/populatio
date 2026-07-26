@@ -6,9 +6,9 @@ export function GameHeader() {
       <Link
         href="/"
         className="font-display text-lg font-extrabold tracking-tight text-ink"
-        aria-label="Rodea, inicio"
+        aria-label="populat.io, inicio"
       >
-        rodea<span className="text-accent">.</span>
+        populat<span className="text-accent">.io</span>
       </Link>
       <nav className="flex items-center gap-4 text-xs text-muted">
         <Link href="/como-se-calcula" className="hover:text-ink">

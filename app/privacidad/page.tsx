@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { StaticPage } from "@/components/StaticPage";
 
-export const metadata: Metadata = { title: "Privacidad — Rodea" };
+export const metadata: Metadata = { title: "Privacidad — populat.io" };
 
 export default function PrivacidadPage() {
   return (

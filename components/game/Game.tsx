@@ -210,7 +210,7 @@ export function Game() {
     <div className="flex h-dvh flex-col">
       <GameHeader />
       {mounted && state.target > 0 ? (
-        <TargetDisplay target={state.target} />
+        <TargetDisplay target={state.target} onNewTarget={handleNewTarget} />
       ) : (
         <div className="px-4 pb-3 sm:px-6">
           <div className="h-8 w-72 animate-pulse rounded bg-line sm:h-10" />
@@ -268,7 +268,7 @@ export function Game() {
               onClick={handleCheck}
               disabled={!dataReady || checking}
               data-testid="check-button"
-              className="pointer-events-auto w-full max-w-sm rounded-2xl bg-accent px-6 py-3.5 font-display text-base font-bold text-white shadow-lg transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
+              className="pointer-events-auto w-full max-w-sm rounded-[15px] bg-accent px-6 py-3.5 font-display text-base font-bold uppercase tracking-wide text-white shadow-btn transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
             >
               {checking ? "Calculando…" : "Comprobar"}
             </button>

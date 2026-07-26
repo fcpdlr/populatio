@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { StaticPage } from "@/components/StaticPage";
 
-export const metadata: Metadata = { title: "Cómo se calcula — Rodea" };
+export const metadata: Metadata = { title: "Cómo se calcula — populat.io" };
 
 export default function ComoSeCalculaPage() {
   return (

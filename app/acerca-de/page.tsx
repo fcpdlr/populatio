@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { StaticPage } from "@/components/StaticPage";
 
-export const metadata: Metadata = { title: "Acerca de — Rodea" };
+export const metadata: Metadata = { title: "Acerca de — populat.io" };
 
 export default function AcercaDePage() {
   return (
     <StaticPage title="Acerca de">
       <p>
-        <strong>Rodea</strong> es un juego sencillo: te damos una cifra de
+        <strong>populat.io</strong> es un juego sencillo: te damos una cifra de
         habitantes, dibujas una zona sobre el mapa de España y comprobamos
         cuánta gente vive realmente dentro. Cuanto más te acerques, más puntos.
       </p>

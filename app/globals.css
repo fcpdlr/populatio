@@ -1,13 +1,30 @@
 @import "tailwindcss";
 
 @theme {
-  --color-paper: #fafaf8;
-  --color-ink: #17171b;
-  --color-muted: #6c6c74;
-  --color-line: #e6e6e0;
-  --color-accent: #2743f0;
-  --color-accent-deep: #1c31b8;
-  --color-accent-soft: #eaeefe;
+  /* populat.io — identidad visual: tinta/papel/teal (ver paquete-identidad/tokens-globals.css) */
+  --color-paper: #faf9f6;
+  --color-ink: #16212e;
+  --color-muted: #7c8896;
+  --color-line: #e8ebee;
+  --color-accent: #0e5c54;
+  --color-accent-deep: #0a463f;
+  --color-accent-soft: #e4f0ee;
+  --color-teal: #0e5c54;
+  --color-teal-deep: #0a463f;
+  --color-teal-soft: #e4f0ee;
+  --color-teal-bright: #3fb8a6;
+  /* rampa de resultado (share) */
+  --color-score-bullseye: #0e5c54;
+  --color-score-close: #3c8a72;
+  --color-score-near: #c9a24a;
+  --color-score-off: #b26a3f;
+  --color-score-far: #cfd4d8;
+  /* mapa */
+  --color-map-sea: #eaf1f2;
+  --color-map-land: #f6f4ee;
+  --color-map-land-line: #dedbd0;
+  --shadow-btn: 0 6px 18px rgba(14, 92, 84, 0.28);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
   --font-display: var(--font-bricolage), system-ui, sans-serif;
   --font-body: var(--font-inter), system-ui, sans-serif;
 }

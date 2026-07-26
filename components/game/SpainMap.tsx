@@ -64,13 +64,13 @@ type ThemeColors = {
 };
 
 const FALLBACK_COLORS: ThemeColors = {
-  paper: "#fafaf8",
-  ink: "#17171b",
-  line: "#e6e6e0",
-  muted: "#6c6c74",
-  accent: "#2743f0",
-  accentDeep: "#1c31b8",
-  accentSoft: "#eaeefe",
+  paper: "#faf9f6",
+  ink: "#16212e",
+  line: "#e8ebee",
+  muted: "#7c8896",
+  accent: "#0e5c54",
+  accentDeep: "#0a463f",
+  accentSoft: "#e4f0ee",
 };
 
 function readThemeColors(): ThemeColors {
@@ -493,7 +493,7 @@ export function SpainMap({
             onClear={clearSelection}
           />
           <div
-            className="absolute bottom-3 left-3 flex flex-wrap gap-1.5"
+            className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
             role="group"
             aria-label="Ir a un territorio"
           >
