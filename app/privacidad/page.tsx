@@ -21,6 +21,12 @@ export default function PrivacidadPage() {
         limitará a eventos de juego agregados y esta página se actualizará para
         reflejarlo.
       </p>
+      <p>
+        No mostramos publicidad. El panel de resultado incluye un enlace
+        opcional de apoyo (&ldquo;Invítame a un café&rdquo;) que abre una web
+        externa (Buy Me a Coffee) en una pestaña nueva; no compartimos ningún
+        dato contigo ni con esa plataforma al mostrarlo.
+      </p>
     </StaticPage>
   );
 }

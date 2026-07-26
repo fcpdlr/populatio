@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import simplify from "@turf/simplify";
 import { DrawingControls } from "./DrawingControls";
+import { cleanPolygon } from "@/lib/geo/clean";
 
 export type SpainMapProps = {
   /** Se invoca con la geometría dibujada, o null si no hay selección. */
@@ -61,6 +62,9 @@ type ThemeColors = {
   accent: string;
   accentDeep: string;
   accentSoft: string;
+  mapSea: string;
+  mapLand: string;
+  mapLandLine: string;
 };
 
 const FALLBACK_COLORS: ThemeColors = {
@@ -71,6 +75,9 @@ const FALLBACK_COLORS: ThemeColors = {
   accent: "#0e5c54",
   accentDeep: "#0a463f",
   accentSoft: "#e4f0ee",
+  mapSea: "#eaf1f2",
+  mapLand: "#f6f4ee",
+  mapLandLine: "#dedbd0",
 };
 
 function readThemeColors(): ThemeColors {
@@ -88,6 +95,9 @@ function readThemeColors(): ThemeColors {
     accent: read("--color-accent", FALLBACK_COLORS.accent),
     accentDeep: read("--color-accent-deep", FALLBACK_COLORS.accentDeep),
     accentSoft: read("--color-accent-soft", FALLBACK_COLORS.accentSoft),
+    mapSea: read("--color-map-sea", FALLBACK_COLORS.mapSea),
+    mapLand: read("--color-map-land", FALLBACK_COLORS.mapLand),
+    mapLandLine: read("--color-map-land-line", FALLBACK_COLORS.mapLandLine),
   };
 }
 
@@ -155,7 +165,7 @@ export function SpainMap({
   const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1 });
   const outlineRef = useRef<Feature<Polygon | MultiPolygon> | null>(null);
   const colorsRef = useRef<ThemeColors>(FALLBACK_COLORS);
-  const polygonRef = useRef<Polygon | null>(null);
+  const polygonRef = useRef<Polygon | MultiPolygon | null>(null);
   const pathRef = useRef<LngLat[]>([]);
   const drawingRef = useRef(false);
   const animRef = useRef<number | null>(null);
@@ -185,10 +195,11 @@ export function SpainMap({
       project(camera, width, height, lng, lat);
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = colors.paper;
+    ctx.fillStyle = colors.mapSea;
     ctx.fillRect(0, 0, width, height);
 
-    // Contorno de España
+    // Contorno de España (tierra en gris cálido neutro; el teal se reserva
+    // por completo para la selección del usuario)
     ctx.beginPath();
     for (const ring of ringsOf(outline.geometry)) {
       ring.forEach(([lng, lat], idx) => {
@@ -198,17 +209,18 @@ export function SpainMap({
       });
       ctx.closePath();
     }
-    ctx.fillStyle = colors.accentSoft;
+    ctx.fillStyle = colors.mapLand;
     ctx.fill("evenodd");
-    ctx.strokeStyle = colors.accent;
-    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = colors.mapLandLine;
+    ctx.lineWidth = 1;
     ctx.stroke();
 
     // Selección cerrada
     const polygon = polygonRef.current;
     if (polygon) {
+      const rings = ringsOf(polygon);
       ctx.beginPath();
-      for (const ring of polygon.coordinates) {
+      for (const ring of rings) {
         ring.forEach(([lng, lat], idx) => {
           const [x, y] = proj(lng, lat);
           if (idx === 0) ctx.moveTo(x, y);
@@ -221,6 +233,21 @@ export function SpainMap({
       ctx.strokeStyle = colors.accent;
       ctx.lineWidth = 2;
       ctx.stroke();
+
+      // Vértices: teal con borde blanco
+      for (const ring of rings) {
+        const vertices = ring.slice(0, -1); // el último cierra sobre el primero
+        for (const [lng, lat] of vertices) {
+          const [x, y] = proj(lng, lat);
+          ctx.beginPath();
+          ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = colors.accent;
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "#ffffff";
+          ctx.stroke();
+        }
+      }
     }
 
     // Trazo en curso
@@ -437,7 +464,13 @@ export function SpainMap({
         // Si la simplificación falla, se usa el anillo original.
       }
 
-      const polygon: Polygon = { type: "Polygon", coordinates: [simplifiedRing] };
+      const rawPolygon: Polygon = { type: "Polygon", coordinates: [simplifiedRing] };
+      let polygon: Polygon | MultiPolygon = rawPolygon;
+      try {
+        polygon = cleanPolygon(rawPolygon);
+      } catch {
+        // Si la limpieza falla, seguimos con el trazo original.
+      }
       polygonRef.current = polygon;
       setHasSelection(true);
       selectionChangeRef.current(polygon);

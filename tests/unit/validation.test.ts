@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Polygon } from "geojson";
 import { validateSelection } from "@/lib/geo/validation";
+import { cleanPolygon } from "@/lib/geo/clean";
 import { square } from "./fixtures";
 
 describe("validateSelection", () => {
@@ -35,7 +36,7 @@ describe("validateSelection", () => {
     if (!r.ok) expect(r.error).toBe("too-small");
   });
 
-  it("rechaza polígonos autointersectados (pajarita)", () => {
+  it("ya no existe un rechazo específico por autointersección (se limpia antes de validar)", () => {
     const bowtie: Polygon = {
       type: "Polygon",
       coordinates: [
@@ -48,9 +49,13 @@ describe("validateSelection", () => {
         ],
       ],
     };
-    const r = validateSelection(bowtie);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toBe("self-intersecting");
+    // Sin limpiar, el área de una pajarita se cancela y sigue sin ser jugable
+    // (falla por "too-small"; el código "self-intersecting" ya no existe en
+    // ValidationError). El flujo real limpia el trazo antes de validar.
+    expect(validateSelection(bowtie).ok).toBe(false);
+
+    const cleaned = cleanPolygon(bowtie);
+    expect(validateSelection(cleaned).ok).toBe(true);
   });
 
   it("rechaza selecciones fuera de España", () => {
