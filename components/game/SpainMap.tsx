@@ -20,6 +20,12 @@ export type SpainMapProps = {
    * sentido en la pantalla de resultado; nunca durante el dibujo).
    */
   showDensityToggle?: boolean;
+  /**
+   * Geometría fija a mostrar en modo solo lectura (p. ej. el intento ya
+   * confirmado del reto Diario). Sustituye cualquier trazo en curso y no se
+   * puede editar; combínalo con `disabled`.
+   */
+  lockedGeometry?: Polygon | MultiPolygon | null;
 };
 
 type DensityStatus = "idle" | "loading" | "ready" | "error";
@@ -215,6 +221,7 @@ export function SpainMap({
   resetSignal = 0,
   disabled = false,
   showDensityToggle = false,
+  lockedGeometry = null,
 }: SpainMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -545,6 +552,18 @@ export function SpainMap({
     }
     draw();
   }, [showDensityToggle, draw]);
+
+  // Geometría fija de solo lectura (p. ej. el intento ya confirmado del
+  // reto Diario): sustituye cualquier trazo en curso sin pasar por
+  // clearSelection, así no dispara onSelectionChange ni molesta al padre.
+  useEffect(() => {
+    if (!lockedGeometry) return;
+    drawingRef.current = false;
+    pathRef.current = [];
+    polygonRef.current = lockedGeometry;
+    setHasSelection(true);
+    draw();
+  }, [lockedGeometry, draw]);
 
   // Carga del contorno de España y arranque del canvas
   useEffect(() => {

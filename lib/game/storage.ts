@@ -1,22 +1,8 @@
 import type { AttemptResult } from "@/lib/population/types";
+import { safeStorage, type StorageLike } from "@/lib/storage/safeStorage";
 
 const KEY_PREFIX = "rodea:best:";
 const ATTEMPTS_PREFIX = "rodea:attempts:";
-
-type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-
-function safeStorage(): StorageLike | null {
-  try {
-    if (typeof window === "undefined") return null;
-    const s = window.localStorage;
-    const probe = "__rodea_probe__";
-    s.setItem(probe, "1");
-    s.removeItem(probe);
-    return s;
-  } catch {
-    return null;
-  }
-}
 
 export function loadBest(
   target: number,

@@ -42,6 +42,30 @@ describe("reducer del juego", () => {
     expect(s.attempts).toBe(1);
   });
 
+  it("data-ready tardío no retrocede una fase ya avanzada (p. ej. resultado bloqueado del Diario)", () => {
+    let s = reducer(initialState(5_000_000), { type: "data-ready" });
+    const result = buildAttemptResult(4_800_000, 5_000_000);
+    s = reducer(s, {
+      type: "check-finished",
+      result,
+      contributions: [],
+      attempts: 0,
+      best: null,
+    });
+    expect(s.phase).toBe("result");
+    s = reducer(s, { type: "data-ready" }); // el worker responde tarde
+    expect(s.phase).toBe("result");
+    expect(s.result?.score).toBe(result.score);
+  });
+
+  it("data-error tardío no tapa una fase ya avanzada", () => {
+    let s = reducer(initialState(5_000_000), { type: "data-ready" });
+    s = reducer(s, { type: "selection-changed", hasSelection: true });
+    s = reducer(s, { type: "data-error", message: "tarde" });
+    expect(s.phase).toBe("drawn");
+    expect(s.errorMessage).toBeNull();
+  });
+
   it("nuevo objetivo reinicia el estado conservando best/attempts del nuevo objetivo", () => {
     let s = reducer(initialState(5_000_000), { type: "data-ready" });
     s = reducer(s, {
