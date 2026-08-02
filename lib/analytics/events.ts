@@ -16,7 +16,15 @@ export type AnalyticsEvent =
       score: number;
     }
   | { name: "new_target"; target: number }
-  | { name: "best_score_improved"; target: number; score: number };
+  | { name: "best_score_improved"; target: number; score: number }
+  | { name: "mode_changed"; mode: "daily" | "practice" }
+  | {
+      name: "daily_attempt_confirmed";
+      target: number;
+      challengeNumber: number;
+      score: number;
+      streak: number;
+    };
 
 type Transport = (event: AnalyticsEvent) => void;
 

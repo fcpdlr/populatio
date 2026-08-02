@@ -1,11 +1,11 @@
 /** Rango razonable de objetivos para el MVP. */
 export const MIN_TARGET = 1_000_000;
 export const MAX_TARGET = 30_000_000;
-export const TARGET_STEP = 100_000;
+export const TARGET_STEP = 50_000;
 
 /**
  * Genera un objetivo aleatorio entre MIN_TARGET y MAX_TARGET,
- * redondeado a múltiplos de 100.000.
+ * redondeado a múltiplos de 50.000.
  * Acepta un generador aleatorio inyectable para tests deterministas.
  */
 export function generateTarget(random: () => number = Math.random): number {

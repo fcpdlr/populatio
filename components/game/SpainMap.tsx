@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import simplify from "@turf/simplify";
 import { DrawingControls } from "./DrawingControls";
+import { cleanPolygon } from "@/lib/geo/clean";
+import { loadDensityGrid, type DensityGrid } from "@/lib/population/densityGrid";
+import { loadProvinceLines, type ProvinceGeometries } from "@/lib/geo/provinces";
 
 export type SpainMapProps = {
   /** Se invoca con la geometría dibujada, o null si no hay selección. */
@@ -12,7 +15,21 @@ export type SpainMapProps = {
   resetSignal?: number;
   /** Deshabilita el dibujo (p. ej. mientras se calcula). */
   disabled?: boolean;
+  /**
+   * Permite mostrar el interruptor de densidad de población (solo tiene
+   * sentido en la pantalla de resultado; nunca durante el dibujo).
+   */
+  showDensityToggle?: boolean;
+  /**
+   * Geometría fija a mostrar en modo solo lectura (p. ej. el intento ya
+   * confirmado del reto Diario). Sustituye cualquier trazo en curso y no se
+   * puede editar; combínalo con `disabled`.
+   */
+  lockedGeometry?: Polygon | MultiPolygon | null;
 };
+
+type DensityStatus = "idle" | "loading" | "ready" | "error";
+type ProvincesStatus = "idle" | "loading" | "ready" | "error";
 
 type LngLat = readonly [number, number];
 type Bounds = readonly [LngLat, LngLat]; // [suroeste, noreste]
@@ -50,6 +67,9 @@ const VIEW_PADDING_PX = 28;
 const MIN_POINT_DISTANCE_PX = 3;
 const SIMPLIFY_TOLERANCE_PX = 3;
 const GOTO_DURATION_MS = 500;
+const MIN_PINCH_DISTANCE_PX = 1;
+const MIN_SCALE_FACTOR = 0.6; // respecto al ajuste inicial a la península
+const MAX_SCALE_FACTOR = 35;
 
 type Camera = { centerLng: number; centerLat: number; scale: number };
 
@@ -61,16 +81,26 @@ type ThemeColors = {
   accent: string;
   accentDeep: string;
   accentSoft: string;
+  mapSea: string;
+  mapLand: string;
+  mapLandLine: string;
+  densityRgb: string;
+  provinceLine: string;
 };
 
 const FALLBACK_COLORS: ThemeColors = {
-  paper: "#fafaf8",
-  ink: "#17171b",
-  line: "#e6e6e0",
-  muted: "#6c6c74",
-  accent: "#2743f0",
-  accentDeep: "#1c31b8",
-  accentSoft: "#eaeefe",
+  paper: "#faf9f6",
+  ink: "#16212e",
+  line: "#e8ebee",
+  muted: "#7c8896",
+  accent: "#0e5c54",
+  accentDeep: "#0a463f",
+  accentSoft: "#e4f0ee",
+  mapSea: "#eaf1f2",
+  mapLand: "#f6f4ee",
+  mapLandLine: "#dedbd0",
+  densityRgb: "44, 55, 66",
+  provinceLine: "#c9ccce",
 };
 
 function readThemeColors(): ThemeColors {
@@ -88,6 +118,11 @@ function readThemeColors(): ThemeColors {
     accent: read("--color-accent", FALLBACK_COLORS.accent),
     accentDeep: read("--color-accent-deep", FALLBACK_COLORS.accentDeep),
     accentSoft: read("--color-accent-soft", FALLBACK_COLORS.accentSoft),
+    mapSea: read("--color-map-sea", FALLBACK_COLORS.mapSea),
+    mapLand: read("--color-map-land", FALLBACK_COLORS.mapLand),
+    mapLandLine: read("--color-map-land-line", FALLBACK_COLORS.mapLandLine),
+    densityRgb: read("--map-density-rgb", FALLBACK_COLORS.densityRgb),
+    provinceLine: read("--color-province-line", FALLBACK_COLORS.provinceLine),
   };
 }
 
@@ -132,6 +167,44 @@ function unproject(
   return [lng, lat];
 }
 
+/**
+ * Calcula la cámara (con la escala dada) que deja el punto del mundo
+ * (worldLng, worldLat) proyectado exactamente en el punto de pantalla
+ * (screenX, screenY). Es la base del zoom con gesto de pellizco: se fija el
+ * punto del mundo bajo el punto medio de los dos dedos antes de cambiar el
+ * zoom, y se recoloca la cámara para que siga bajo el punto medio después.
+ */
+function cameraPinnedAt(
+  width: number,
+  height: number,
+  scale: number,
+  worldLng: number,
+  worldLat: number,
+  screenX: number,
+  screenY: number,
+): Camera {
+  return {
+    centerLng: worldLng - (screenX - width / 2) / (scale * REF_COS_LAT),
+    centerLat: worldLat - (height / 2 - screenY) / scale,
+    scale,
+  };
+}
+
+type PointerPoint = { x: number; y: number };
+
+function pinchStateFromPointers(pointers: Map<number, PointerPoint>): {
+  distance: number;
+  midX: number;
+  midY: number;
+} {
+  const [a, b] = pointers.values();
+  return {
+    distance: Math.hypot(b.x - a.x, b.y - a.y),
+    midX: (a.x + b.x) / 2,
+    midY: (a.y + b.y) / 2,
+  };
+}
+
 /** Anillos (arrays de [lng,lat]) de un Polygon o MultiPolygon, aplanados. */
 function ringsOf(geometry: Polygon | MultiPolygon): number[][][] {
   return geometry.type === "Polygon"
@@ -147,24 +220,42 @@ export function SpainMap({
   onSelectionChange,
   resetSignal = 0,
   disabled = false,
+  showDensityToggle = false,
+  lockedGeometry = null,
 }: SpainMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1 });
+  const baseScaleRef = useRef(1);
+  const pointersRef = useRef<Map<number, PointerPoint>>(new Map());
+  const pinchRef = useRef<{ distance: number; midX: number; midY: number } | null>(null);
   const outlineRef = useRef<Feature<Polygon | MultiPolygon> | null>(null);
   const colorsRef = useRef<ThemeColors>(FALLBACK_COLORS);
-  const polygonRef = useRef<Polygon | null>(null);
+  const polygonRef = useRef<Polygon | MultiPolygon | null>(null);
   const pathRef = useRef<LngLat[]>([]);
   const drawingRef = useRef(false);
   const animRef = useRef<number | null>(null);
   const selectionChangeRef = useRef(onSelectionChange);
   const disabledRef = useRef(disabled);
+  const densityGridRef = useRef<DensityGrid | null>(null);
+  const densityOnRef = useRef(false);
+  const densityAllowedRef = useRef(showDensityToggle);
+  const densityBinsRef = useRef<{ cols: number; rows: number; sums: Float64Array } | null>(
+    null,
+  );
+  const provincesDataRef = useRef<ProvinceGeometries | null>(null);
+  const provincesOnRef = useRef(false);
 
   const [hasSelection, setHasSelection] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [densityOn, setDensityOn] = useState(false);
+  const [densityStatus, setDensityStatus] = useState<DensityStatus>("idle");
+  const [provincesOn, setProvincesOn] = useState(false);
+  const [provincesStatus, setProvincesStatus] = useState<ProvincesStatus>("idle");
+  const [provincesAvailable, setProvincesAvailable] = useState(false);
 
   useEffect(() => {
     selectionChangeRef.current = onSelectionChange;
@@ -185,10 +276,11 @@ export function SpainMap({
       project(camera, width, height, lng, lat);
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = colors.paper;
+    ctx.fillStyle = colors.mapSea;
     ctx.fillRect(0, 0, width, height);
 
-    // Contorno de España
+    // Contorno de España (tierra en gris cálido neutro; el teal se reserva
+    // por completo para la selección del usuario)
     ctx.beginPath();
     for (const ring of ringsOf(outline.geometry)) {
       ring.forEach(([lng, lat], idx) => {
@@ -198,17 +290,100 @@ export function SpainMap({
       });
       ctx.closePath();
     }
-    ctx.fillStyle = colors.accentSoft;
+    ctx.fillStyle = colors.mapLand;
     ctx.fill("evenodd");
-    ctx.strokeStyle = colors.accent;
-    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = colors.mapLandLine;
+    ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Densidad de población (solo en el resultado, nunca durante el dibujo).
+    // Se agrega la población en una rejilla de píxeles antes de pintar: así
+    // cada celda contribuye una sola vez por bin y no se satura de negro por
+    // el solape de miles de celdas de 1 km superpuestas en pantalla.
+    const density = densityGridRef.current;
+    if (densityAllowedRef.current && densityOnRef.current && density) {
+      const { lngs, lats, pops } = density;
+      const BIN_PX = 3;
+      const cols = Math.max(1, Math.ceil(width / BIN_PX));
+      const rows = Math.max(1, Math.ceil(height / BIN_PX));
+
+      let bins = densityBinsRef.current;
+      if (!bins || bins.cols !== cols || bins.rows !== rows) {
+        bins = { cols, rows, sums: new Float64Array(cols * rows) };
+        densityBinsRef.current = bins;
+      } else {
+        bins.sums.fill(0);
+      }
+
+      // Límites visibles actuales (con margen), para no iterar celdas fuera de pantalla.
+      const [aLng, aLat] = unproject(camera, width, height, -20, height + 20);
+      const [bLng, bLat] = unproject(camera, width, height, width + 20, -20);
+      const minLng = Math.min(aLng, bLng);
+      const maxLng = Math.max(aLng, bLng);
+      const minLat = Math.min(aLat, bLat);
+      const maxLat = Math.max(aLat, bLat);
+
+      let maxBin = 0;
+      const { sums } = bins;
+      for (let k = 0; k < pops.length; k++) {
+        const pop = pops[k];
+        if (pop === 0) continue;
+        const lng = lngs[k];
+        if (lng < minLng || lng > maxLng) continue;
+        const lat = lats[k];
+        if (lat < minLat || lat > maxLat) continue;
+        const [x, y] = proj(lng, lat);
+        const col = Math.floor(x / BIN_PX);
+        const row = Math.floor(y / BIN_PX);
+        if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+        const idx = row * cols + col;
+        const sum = sums[idx] + pop;
+        sums[idx] = sum;
+        if (sum > maxBin) maxBin = sum;
+      }
+
+      if (maxBin > 0) {
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const sum = sums[row * cols + col];
+            if (sum <= 0) continue;
+            const intensity = Math.sqrt(sum / maxBin);
+            const cx = col * BIN_PX + BIN_PX / 2;
+            const cy = row * BIN_PX + BIN_PX / 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 0.5 + 1.4 * intensity, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${colors.densityRgb}, ${(0.08 + 0.6 * intensity).toFixed(3)})`;
+            ctx.fill();
+          }
+        }
+      }
+    }
+
+    // Líneas de provincia (opcionales, apagadas por defecto): por encima de
+    // la tierra y la densidad, pero por debajo de la selección del usuario.
+    const provinces = provincesDataRef.current;
+    if (provincesOnRef.current && provinces) {
+      ctx.beginPath();
+      for (const geometry of provinces) {
+        for (const ring of ringsOf(geometry)) {
+          ring.forEach(([lng, lat], idx) => {
+            const [x, y] = proj(lng, lat);
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+        }
+      }
+      ctx.strokeStyle = colors.provinceLine;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
 
     // Selección cerrada
     const polygon = polygonRef.current;
     if (polygon) {
+      const rings = ringsOf(polygon);
       ctx.beginPath();
-      for (const ring of polygon.coordinates) {
+      for (const ring of rings) {
         ring.forEach(([lng, lat], idx) => {
           const [x, y] = proj(lng, lat);
           if (idx === 0) ctx.moveTo(x, y);
@@ -221,6 +396,21 @@ export function SpainMap({
       ctx.strokeStyle = colors.accent;
       ctx.lineWidth = 2;
       ctx.stroke();
+
+      // Vértices: teal con borde blanco
+      for (const ring of rings) {
+        const vertices = ring.slice(0, -1); // el último cierra sobre el primero
+        for (const [lng, lat] of vertices) {
+          const [x, y] = proj(lng, lat);
+          ctx.beginPath();
+          ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = colors.accent;
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "#ffffff";
+          ctx.stroke();
+        }
+      }
     }
 
     // Trazo en curso
@@ -269,7 +459,9 @@ export function SpainMap({
     const hadSize = sizeRef.current.width > 0;
     sizeRef.current = { width, height };
     if (!hadSize) {
-      cameraRef.current = cameraForBounds(VIEWS.peninsula, width, height);
+      const initialCamera = cameraForBounds(VIEWS.peninsula, width, height);
+      cameraRef.current = initialCamera;
+      baseScaleRef.current = initialCamera.scale;
     }
     draw();
   }, [draw]);
@@ -305,6 +497,74 @@ export function SpainMap({
     draw();
   }, [draw]);
 
+  const toggleDensity = useCallback(async () => {
+    if (densityOnRef.current) {
+      densityOnRef.current = false;
+      setDensityOn(false);
+      draw();
+      return;
+    }
+    if (!densityGridRef.current) {
+      setDensityStatus("loading");
+      try {
+        densityGridRef.current = await loadDensityGrid();
+      } catch {
+        setDensityStatus("error");
+        return;
+      }
+    }
+    setDensityStatus("ready");
+    densityOnRef.current = true;
+    setDensityOn(true);
+    draw();
+  }, [draw]);
+
+  const toggleProvinces = useCallback(async () => {
+    if (provincesOnRef.current) {
+      provincesOnRef.current = false;
+      setProvincesOn(false);
+      draw();
+      return;
+    }
+    if (!provincesDataRef.current) {
+      setProvincesStatus("loading");
+      try {
+        provincesDataRef.current = await loadProvinceLines();
+      } catch {
+        setProvincesStatus("error");
+        return;
+      }
+    }
+    setProvincesStatus("ready");
+    provincesOnRef.current = true;
+    setProvincesOn(true);
+    draw();
+  }, [draw]);
+
+  // La densidad solo puede mostrarse en el resultado: al salir de esa fase
+  // (nuevo intento, nuevo objetivo, o borrar la selección) se apaga y se
+  // vuelve a exigir una activación explícita la próxima vez.
+  useEffect(() => {
+    densityAllowedRef.current = showDensityToggle;
+    if (!showDensityToggle) {
+      densityOnRef.current = false;
+      setDensityOn(false);
+    }
+    draw();
+  }, [showDensityToggle, draw]);
+
+  // Geometría fija de solo lectura (p. ej. el intento ya confirmado del
+  // reto Diario): sustituye cualquier trazo en curso sin pasar por
+  // clearSelection, así no dispara onSelectionChange ni molesta al padre.
+  useEffect(() => {
+    if (!lockedGeometry) return;
+    drawingRef.current = false;
+    pathRef.current = [];
+    polygonRef.current = lockedGeometry;
+    setHasSelection(true);
+    draw();
+  }, [lockedGeometry, draw]);
+
   // Carga del contorno de España y arranque del canvas
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -336,6 +596,25 @@ export function SpainMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Comprueba en silencio si existe public/provincias.geojson (capa opcional,
+  // todavía no generada). Mientras no exista, el interruptor de provincias ni
+  // siquiera aparece: no hay error que mostrar ni que quitar más tarde, solo
+  // se activa solo cuando el fichero esté disponible.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    fetch("/provincias.geojson", { method: "HEAD" })
+      .then((res) => {
+        if (!cancelled) setProvincesAvailable(res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setProvincesAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Redimensionado del canvas al cambiar el tamaño del contenedor
   useEffect(() => {
     const container = containerRef.current;
@@ -364,11 +643,81 @@ export function SpainMap({
     [],
   );
 
+  /** Punto del evento en píxeles relativos al canvas (para el seguimiento de pellizco). */
+  const screenPointFromEvent = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): PointerPoint => {
+      const rect = canvasRef.current!.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    },
+    [],
+  );
+
+  const commitDrawnPath = useCallback(() => {
+    const raw = pathRef.current;
+    pathRef.current = [];
+
+    if (raw.length < 3) {
+      polygonRef.current = null;
+      setHasSelection(false);
+      selectionChangeRef.current(null);
+      draw();
+      return;
+    }
+
+    const ring = [...raw, raw[0]].map(([lng, lat]) => [lng, lat]);
+    const toleranceDeg = SIMPLIFY_TOLERANCE_PX / cameraRef.current.scale;
+    let simplifiedRing = ring;
+    try {
+      const simplified = simplify(
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Polygon", coordinates: [ring] },
+        },
+        { tolerance: toleranceDeg, highQuality: true },
+      );
+      const candidate = simplified.geometry.coordinates[0];
+      if (candidate && candidate.length >= 4) simplifiedRing = candidate;
+    } catch {
+      // Si la simplificación falla, se usa el anillo original.
+    }
+
+    const rawPolygon: Polygon = { type: "Polygon", coordinates: [simplifiedRing] };
+    let polygon: Polygon | MultiPolygon = rawPolygon;
+    try {
+      polygon = cleanPolygon(rawPolygon);
+    } catch {
+      // Si la limpieza falla, seguimos con el trazo original.
+    }
+    polygonRef.current = polygon;
+    setHasSelection(true);
+    selectionChangeRef.current(polygon);
+    draw();
+  }, [draw]);
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (disabledRef.current || !mapReady) return;
       e.preventDefault();
-      canvasRef.current?.setPointerCapture(e.pointerId);
+      try {
+        canvasRef.current?.setPointerCapture(e.pointerId);
+      } catch {
+        // Algunos navegadores pueden rechazar la captura; no es crítico.
+      }
+      pointersRef.current.set(e.pointerId, screenPointFromEvent(e));
+
+      if (pointersRef.current.size >= 2) {
+        // Un segundo dedo convierte el gesto en pellizco: se cancela
+        // cualquier trazo de un solo dedo en curso (sin tocar la selección
+        // ya confirmada) y se arranca el seguimiento del pellizco.
+        drawingRef.current = false;
+        pathRef.current = [];
+        pinchRef.current = pinchStateFromPointers(pointersRef.current);
+        draw();
+        return;
+      }
+
+      // Un solo dedo: comportamiento de dibujo habitual.
       polygonRef.current = null;
       pathRef.current = [pointFromEvent(e)];
       drawingRef.current = true;
@@ -376,17 +725,49 @@ export function SpainMap({
       selectionChangeRef.current(null);
       draw();
     },
-    [draw, mapReady, pointFromEvent],
+    [draw, mapReady, pointFromEvent, screenPointFromEvent],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (pointersRef.current.has(e.pointerId)) {
+        pointersRef.current.set(e.pointerId, screenPointFromEvent(e));
+      }
+
+      if (pointersRef.current.size >= 2) {
+        e.preventDefault();
+        const state = pinchStateFromPointers(pointersRef.current);
+        const prev = pinchRef.current;
+        if (
+          prev &&
+          prev.distance > MIN_PINCH_DISTANCE_PX &&
+          state.distance > MIN_PINCH_DISTANCE_PX
+        ) {
+          const { width, height } = sizeRef.current;
+          const camera = cameraRef.current;
+          const rawScale = camera.scale * (state.distance / prev.distance);
+          const minScale = baseScaleRef.current * MIN_SCALE_FACTOR;
+          const maxScale = baseScaleRef.current * MAX_SCALE_FACTOR;
+          const newScale = Math.min(Math.max(rawScale, minScale), maxScale);
+          const [worldLng, worldLat] = unproject(camera, width, height, prev.midX, prev.midY);
+          cameraRef.current = cameraPinnedAt(
+            width,
+            height,
+            newScale,
+            worldLng,
+            worldLat,
+            state.midX,
+            state.midY,
+          );
+        }
+        pinchRef.current = state;
+        draw();
+        return;
+      }
+
       if (!drawingRef.current) return;
       e.preventDefault();
-      const canvas = canvasRef.current;
-      const rect = canvas!.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const { x, y } = screenPointFromEvent(e);
       const path = pathRef.current;
       const { width, height } = sizeRef.current;
       const camera = cameraRef.current;
@@ -399,51 +780,45 @@ export function SpainMap({
       path.push(unproject(camera, width, height, x, y));
       draw();
     },
-    [draw],
+    [draw, screenPointFromEvent],
   );
 
-  const finishDrawing = useCallback(
+  const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!drawingRef.current) return;
-      drawingRef.current = false;
-      canvasRef.current?.releasePointerCapture(e.pointerId);
+      try {
+        canvasRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        // El navegador puede haber liberado ya la captura; no es crítico.
+      }
+      pointersRef.current.delete(e.pointerId);
 
-      const raw = pathRef.current;
-      pathRef.current = [];
+      if (pointersRef.current.size >= 2) {
+        // Sigue habiendo pellizco con los dedos restantes: resincroniza la
+        // referencia para que el próximo movimiento no salte.
+        pinchRef.current = pinchStateFromPointers(pointersRef.current);
+        return;
+      }
 
-      if (raw.length < 3) {
-        polygonRef.current = null;
-        setHasSelection(false);
-        selectionChangeRef.current(null);
+      const wasPinching = pinchRef.current !== null;
+      pinchRef.current = null;
+
+      if (pointersRef.current.size === 1) {
+        // Quedó un dedo tras un pellizco: no reanudamos el dibujo con él
+        // (evita un salto brusco). Hay que soltar y volver a apoyar.
+        return;
+      }
+
+      if (wasPinching || !drawingRef.current) {
+        drawingRef.current = false;
+        pathRef.current = [];
         draw();
         return;
       }
 
-      const ring = [...raw, raw[0]].map(([lng, lat]) => [lng, lat]);
-      const toleranceDeg = SIMPLIFY_TOLERANCE_PX / cameraRef.current.scale;
-      let simplifiedRing = ring;
-      try {
-        const simplified = simplify(
-          {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "Polygon", coordinates: [ring] },
-          },
-          { tolerance: toleranceDeg, highQuality: true },
-        );
-        const candidate = simplified.geometry.coordinates[0];
-        if (candidate && candidate.length >= 4) simplifiedRing = candidate;
-      } catch {
-        // Si la simplificación falla, se usa el anillo original.
-      }
-
-      const polygon: Polygon = { type: "Polygon", coordinates: [simplifiedRing] };
-      polygonRef.current = polygon;
-      setHasSelection(true);
-      selectionChangeRef.current(polygon);
-      draw();
+      drawingRef.current = false;
+      commitDrawnPath();
     },
-    [draw],
+    [commitDrawnPath, draw],
   );
 
   const goTo = useCallback(
@@ -465,8 +840,8 @@ export function SpainMap({
           style={{ display: "block", cursor: disabled ? "default" : "crosshair" }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={finishDrawing}
-          onPointerCancel={finishDrawing}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
         />
       </div>
 
@@ -492,8 +867,48 @@ export function SpainMap({
             disabled={disabled}
             onClear={clearSelection}
           />
+          <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
+            {showDensityToggle && (
+              <button
+                type="button"
+                onClick={toggleDensity}
+                disabled={densityStatus === "loading"}
+                className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
+              >
+                {densityStatus === "loading"
+                  ? "Cargando densidad…"
+                  : densityOn
+                    ? "Ver mapa sin densidad"
+                    : "Ver densidad"}
+              </button>
+            )}
+            {densityStatus === "error" && (
+              <p className="max-w-[220px] text-[11px] text-muted">
+                No se ha podido cargar la densidad.
+              </p>
+            )}
+            {provincesAvailable && (
+              <button
+                type="button"
+                onClick={toggleProvinces}
+                disabled={provincesStatus === "loading"}
+                className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
+              >
+                {provincesStatus === "loading"
+                  ? "Cargando provincias…"
+                  : provincesOn
+                    ? "Ocultar provincias"
+                    : "Mostrar provincias"}
+              </button>
+            )}
+            {provincesAvailable && provincesStatus === "error" && (
+              <p className="max-w-[220px] text-[11px] text-muted">
+                No se ha podido cargar el contorno de provincias.
+              </p>
+            )}
+          </div>
           <div
-            className="absolute bottom-3 left-3 flex flex-wrap gap-1.5"
+            className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
             role="group"
             aria-label="Ir a un territorio"
           >

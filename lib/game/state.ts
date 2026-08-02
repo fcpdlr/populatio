@@ -53,8 +53,18 @@ export function initialState(target: number): GameState {
 export function reducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "data-ready":
-      return { ...state, phase: "ready", errorMessage: null };
+      // Si ya se avanzó de fase (p. ej. el resultado bloqueado del reto
+      // diario, mostrado antes de que el worker termine de cargar), no hay
+      // que retroceder a "ready": solo aplica durante la carga inicial.
+      return {
+        ...state,
+        phase: state.phase === "loading-data" ? "ready" : state.phase,
+        errorMessage: null,
+      };
     case "data-error":
+      // Igual que arriba: un fallo de carga tardío no debe tapar un
+      // resultado (o cualquier otra fase) ya mostrado.
+      if (state.phase !== "loading-data") return state;
       return { ...state, phase: "data-error", errorMessage: action.message };
     case "selection-changed":
       if (state.phase === "loading-data" || state.phase === "data-error") {

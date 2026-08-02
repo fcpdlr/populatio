@@ -1,6 +1,5 @@
 import type { Polygon, MultiPolygon } from "geojson";
 import area from "@turf/area";
-import kinks from "@turf/kinks";
 
 /** Bounding box amplio del territorio español (península, islas, Ceuta y Melilla). */
 export const SPAIN_BBOX: [number, number, number, number] = [
@@ -11,7 +10,6 @@ export type ValidationError =
   | "empty"
   | "not-closed"
   | "too-small"
-  | "self-intersecting"
   | "outside-spain";
 
 export type ValidationResult =
@@ -24,8 +22,6 @@ export const VALIDATION_MESSAGES: Record<ValidationError, string> = {
   empty: "Dibuja primero una zona en el mapa.",
   "not-closed": "La zona debe ser un polígono cerrado.",
   "too-small": "La zona es demasiado pequeña. Amplíala e inténtalo de nuevo.",
-  "self-intersecting":
-    "La línea se cruza consigo misma. Ajusta los vértices para que no se corte.",
   "outside-spain": "La zona está fuera de España. Dibuja sobre el territorio español.",
 };
 
@@ -52,8 +48,6 @@ export function validateSelection(
   }
 
   const feature = { type: "Feature" as const, properties: {}, geometry };
-
-  if (kinks(feature).features.length > 0) return fail("self-intersecting");
 
   if (area(feature) < MIN_AREA_M2) return fail("too-small");
 

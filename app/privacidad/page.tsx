@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { StaticPage } from "@/components/StaticPage";
 
-export const metadata: Metadata = { title: "Privacidad — Rodea" };
+export const metadata: Metadata = { title: "Privacidad — populat.io" };
 
 export default function PrivacidadPage() {
   return (
@@ -20,6 +20,12 @@ export default function PrivacidadPage() {
         herramienta de analítica, será respetuosa con la privacidad, se
         limitará a eventos de juego agregados y esta página se actualizará para
         reflejarlo.
+      </p>
+      <p>
+        No mostramos publicidad. El panel de resultado incluye un enlace
+        opcional de apoyo (&ldquo;Invítame a un café&rdquo;) que abre una web
+        externa (Buy Me a Coffee) en una pestaña nueva; no compartimos ningún
+        dato contigo ni con esa plataforma al mostrarlo.
       </p>
     </StaticPage>
   );
