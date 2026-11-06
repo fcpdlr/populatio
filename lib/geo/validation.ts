@@ -19,7 +19,7 @@ export type ValidationResult =
 const MIN_AREA_M2 = 1_000_000; // 1 km²: por debajo, la selección no es jugable.
 
 export const VALIDATION_MESSAGES: Record<ValidationError, string> = {
-  empty: "Draw a zone on the map first.",
+  empty: "Tap Draw, then drag on the map to draw your zone.",
   "not-closed": "The zone must be a closed shape.",
   "too-small": "That zone is too small. Make it bigger and try again.",
   "outside-spain": "That zone is outside Spain. Draw over Spanish territory.",
