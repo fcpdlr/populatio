@@ -35,7 +35,12 @@ export type WorldIndex = {
 export type BinaryLoader = (path: string) => Promise<Uint32Array>;
 
 /** Por encima de este número de teselas de 1 km en el encuadre se usa la rejilla de 10 km. */
-export const MAX_FINE_TILES = 40;
+/**
+ * Con más teselas que esto en el encuadre se usa la rejilla de 10 km (ya en
+ * memoria): respuesta instantánea y error de borde despreciable en zonas
+ * tan grandes. Con 40 la espera en móvil podía pasar de 10 s.
+ */
+export const MAX_FINE_TILES = 6;
 /** Densificado de los lados del polígono antes de proyectar (grados). */
 const DENSIFY_DEG = 0.2;
 
@@ -168,6 +173,39 @@ export class WorldEstimator implements PopulationEstimator {
       this.tileCache.set(name, p);
     }
     return p;
+  }
+
+  /**
+   * Descarga por adelantado las teselas que necesitará `estimate` (si va a
+   * usar la rejilla de 1 km). Se llama al terminar de dibujar, para que al
+   * pulsar Check el cálculo sea inmediato.
+   */
+  async prefetch(selection: Polygon | MultiPolygon): Promise<void> {
+    const names = this.fineTilesFor(projectRings(selection));
+    if (names) await Promise.all(names.map((n) => this.tile(n).catch(() => null)));
+  }
+
+  /** Teselas de 1 km que tocan los anillos, o null si toca la rejilla de 10 km. */
+  private fineTilesFor(rings: Ring[]): string[] | null {
+    const { x0, y0, cell_m: cell, tile: T } = this.index;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const ring of rings) for (const [x, y] of ring) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const tc0 = Math.max(0, Math.floor((minX - x0) / cell / T));
+    const tc1 = Math.floor((maxX - x0) / cell / T);
+    const tr0 = Math.max(0, Math.floor((y0 - maxY) / cell / T));
+    const tr1 = Math.floor((y0 - minY) / cell / T);
+    if ((tc1 - tc0 + 1) * (tr1 - tr0 + 1) > this.maxFineTiles) return null;
+    const names: string[] = [];
+    for (let r = tr0; r <= tr1; r++) for (let c = tc0; c <= tc1; c++) {
+      const name = `${r}_${c}`;
+      if (this.index.tiles[name]) names.push(name);
+    }
+    return names;
   }
 
   async estimate(selection: Polygon | MultiPolygon): Promise<PopulationEstimate> {

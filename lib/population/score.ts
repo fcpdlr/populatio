@@ -17,13 +17,27 @@ export function percentageError(
 }
 
 /**
- * Puntuación 0–1000. Decae exponencialmente con el error porcentual.
- * error 0 % → 1000 · error 1 % → ~905 · error 5 % → ~607 · error 10 % → ~368.
+ * Puntuación 0–1000. Decae exponencialmente con el error porcentual, con una
+ * curva pensada para premiar acercarse (no solo clavarlo):
+ * 0 % → 1000 · 5 % → 846 · 10 % → 717 · 20 % → 513 · 30 % → 368 · 50 % → 189 · 100 % → 36.
  *
  * Única fuente de verdad de la fórmula: modifícala solo aquí.
  */
+export const SCORE_SCALE = 30;
+
 export function score(percentageErrorValue: number): number {
-  return Math.max(0, Math.round(1000 * Math.exp(-percentageErrorValue / 10)));
+  return Math.max(0, Math.round(1000 * Math.exp(-percentageErrorValue / SCORE_SCALE)));
+}
+
+/** Etiqueta corta para que se entienda el resultado de un vistazo. */
+export function scoreLabel(points: number): string {
+  if (points >= 950) return "Spot on!";
+  if (points >= 800) return "Excellent";
+  if (points >= 650) return "Great";
+  if (points >= 450) return "Good";
+  if (points >= 250) return "Not bad";
+  if (points >= 100) return "Way off";
+  return "Missed";
 }
 
 export function direction(

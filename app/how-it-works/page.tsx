@@ -24,13 +24,19 @@ export default function HowItWorksPage() {
         The grid uses an <strong>equal-area projection</strong> (Mollweide), so
         a cell in Norway covers the same ground as a cell in Nigeria. For small
         and medium zones we count at 1 km and only download the parts of the
-        grid your zone touches. For very large zones, such as half a continent,
-        we count on a 10 km version of the same grid, which is far faster and
-        changes the result by well under 1%.
+        grid your zone touches. For large zones we count on a 10 km version of
+        the same grid, which is instant and changes the result by around 1%.
       </p>
       <p>
         The work runs in a background thread, so the page never freezes while
         it counts.
+      </p>
+      <h2 className="font-display text-xl font-bold">Scoring</h2>
+      <p>
+        You score up to 1,000 points, depending on how far your zone is from
+        the target, as a percentage: 5% off is worth about 850 points, 10%
+        about 720, 20% about 510 and 50% about 190. Getting close always pays,
+        even if you don&apos;t nail it.
       </p>
       <h2 className="font-display text-xl font-bold">Limitations</h2>
       <p>

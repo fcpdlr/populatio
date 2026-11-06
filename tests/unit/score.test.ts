@@ -24,12 +24,14 @@ describe("score", () => {
     expect(score(0)).toBe(1000);
   });
   it("sigue la curva exponencial documentada", () => {
-    expect(score(1)).toBe(905);
-    expect(score(5)).toBe(607);
-    expect(score(10)).toBe(368);
+    expect(score(5)).toBe(846);
+    expect(score(10)).toBe(717);
+    expect(score(17.5)).toBe(558);
+    expect(score(20)).toBe(513);
+    expect(score(50)).toBe(189);
   });
   it("tiende a 0 con errores grandes y nunca es negativa", () => {
-    expect(score(100)).toBe(0);
+    expect(score(100)).toBe(36);
     expect(score(10_000)).toBe(0);
   });
 });
