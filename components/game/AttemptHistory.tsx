@@ -75,17 +75,17 @@ export function AttemptHistory({ best, attempts }: Props) {
     <div
       className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 pb-2 text-[11px] text-muted sm:px-6 [@media(max-height:380px)]:hidden"
       role="group"
-      aria-label="Estadísticas"
+      aria-label="Stats"
     >
       <Stat
         icon={<ErrorIcon />}
-        label="Mejor error"
+        label="Best error"
         value={best ? formatPercent(best.percentageError) : "—"}
       />
-      <Stat icon={<AttemptsIcon />} label="Intentos" value={formatInt(attempts)} />
+      <Stat icon={<AttemptsIcon />} label="Attempts" value={formatInt(attempts)} />
       <Stat
         icon={<ScoreIcon />}
-        label="Mejor puntuación"
+        label="Best score"
         value={best ? formatInt(best.score) : "—"}
       />
     </div>

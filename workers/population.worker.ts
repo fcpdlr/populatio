@@ -25,7 +25,7 @@ const WORLD_BASE = "/world/tiles/";
 
 async function fetchGzipU32(path: string): Promise<Uint32Array> {
   const res = await fetch(WORLD_BASE + path);
-  if (!res.ok) throw new Error("No se han podido descargar los datos de población.");
+  if (!res.ok) throw new Error("Couldn't download the population data.");
   const raw = gunzipSync(new Uint8Array(await res.arrayBuffer()));
   return new Uint32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
 }
@@ -33,7 +33,7 @@ async function fetchGzipU32(path: string): Promise<Uint32Array> {
 async function initWorld(): Promise<void> {
   try {
     const res = await fetch(WORLD_BASE + "index.json");
-    if (!res.ok) throw new Error("No se han podido descargar los datos de población.");
+    if (!res.ok) throw new Error("Couldn't download the population data.");
     const index = (await res.json()) as WorldIndex;
     const world = new WorldEstimator(index, fetchGzipU32);
     await world.init();
@@ -42,7 +42,7 @@ async function initWorld(): Promise<void> {
   } catch (err) {
     post({
       type: "init-error",
-      message: err instanceof Error ? err.message : "Error al cargar los datos.",
+      message: err instanceof Error ? err.message : "Couldn't load the data.",
     });
   }
 }
@@ -54,7 +54,7 @@ async function init(): Promise<void> {
       fetch("/rejilla.bin"),
     ]);
     if (!metaRes.ok || !dataRes.ok) {
-      throw new Error("No se han podido descargar los datos de población.");
+      throw new Error("Couldn't download the population data.");
     }
     const raw = (await metaRes.json()) as RawGridMeta;
     const meta = parseGridMeta(raw);
@@ -70,7 +70,7 @@ async function init(): Promise<void> {
   } catch (err) {
     post({
       type: "init-error",
-      message: err instanceof Error ? err.message : "Error al cargar los datos.",
+      message: err instanceof Error ? err.message : "Couldn't load the data.",
     });
   }
 }
@@ -91,7 +91,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       post({
         type: "estimate-error",
         id: msg.id,
-        message: "Los datos todavía no están listos.",
+        message: "The data isn't ready yet.",
       });
       return;
     }
@@ -103,7 +103,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         type: "estimate-error",
         id: msg.id,
         message:
-          err instanceof Error ? err.message : "Error durante el cálculo.",
+          err instanceof Error ? err.message : "Something went wrong while counting.",
       });
     }
   }

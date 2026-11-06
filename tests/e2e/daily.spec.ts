@@ -24,14 +24,14 @@ async function drawTriangle(page: import("@playwright/test").Page) {
 test("modo Diario: confirmación de intento único y bloqueo persistente", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/spain");
 
   // Arranca en Diario, con el número de reto visible
-  await expect(page.getByRole("tab", { name: "Diario" })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Daily" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await expect(page.locator("text=/Reto diario #\\d+/")).toBeVisible({
+  await expect(page.locator("text=/Daily challenge #\\d+/")).toBeVisible({
     timeout: 20_000,
   });
 
@@ -45,8 +45,8 @@ test("modo Diario: confirmación de intento único y bloqueo persistente", async
   const confirmSheet = page.getByTestId("daily-confirm-sheet");
   await expect(confirmSheet).toBeVisible({ timeout: 5_000 });
 
-  // "Seguir ajustando" descarta la confirmación sin bloquear nada
-  await page.getByRole("button", { name: "Seguir ajustando" }).click();
+  // "Keep adjusting" descarta la confirmación sin bloquear nada
+  await page.getByRole("button", { name: "Keep adjusting" }).click();
   await expect(confirmSheet).toBeHidden();
   await expect(check).toBeVisible();
 
@@ -60,7 +60,7 @@ test("modo Diario: confirmación de intento único y bloqueo persistente", async
   const score = await page.getByTestId("score").textContent();
 
   // No hay reintentos en Diario; en su lugar, cuenta atrás al próximo reto
-  await expect(page.getByRole("button", { name: "Intentar de nuevo" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
   await expect(page.getByTestId("daily-countdown")).toBeVisible();
 
   // Reabrir el mismo día muestra el resultado guardado directamente
@@ -73,8 +73,8 @@ test("modo Diario: confirmación de intento único y bloqueo persistente", async
 test("modo Práctica sigue permitiendo intentos ilimitados sin confirmación", async ({
   page,
 }) => {
-  await page.goto("/");
-  await page.getByRole("tab", { name: "Práctica" }).click();
+  await page.goto("/spain");
+  await page.getByRole("tab", { name: "Practice" }).click();
 
   const check = page.getByTestId("check-button");
   await expect(check).toBeEnabled({ timeout: 60_000 });
@@ -85,6 +85,6 @@ test("modo Práctica sigue permitiendo intentos ilimitados sin confirmación", a
   // Sin hoja de confirmación en Práctica
   await expect(page.getByTestId("daily-confirm-sheet")).toHaveCount(0);
   await expect(page.getByTestId("result-panel")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Intentar de nuevo" }).click();
+  await page.getByRole("button", { name: "Try again" }).click();
   await expect(check).toBeVisible({ timeout: 10_000 });
 });

@@ -52,3 +52,14 @@ export function challengeNumberForDate(dateString: string): number {
   const days = Math.round((current - start) / DAY_MS);
   return days + 1;
 }
+
+/** Fecha (YYYY-MM-DD) en UTC: el reto diario mundial cambia a la vez para todos. */
+export function todayUtc(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** Milisegundos hasta la próxima medianoche UTC (siempre >= 0). */
+export function msUntilNextUtcMidnight(now: Date = new Date()): number {
+  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return Math.max(0, next - now.getTime());
+}

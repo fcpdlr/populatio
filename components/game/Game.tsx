@@ -30,8 +30,8 @@ import {
 } from "@/lib/game/storage";
 import { loadMode, saveMode, type GameMode } from "@/lib/game/modeStorage";
 import {
-  todayInMadrid,
-  msUntilNextMadridMidnight,
+  todayUtc,
+  msUntilNextUtcMidnight,
   challengeNumberForDate,
 } from "@/lib/game/dailyDate";
 import { dailyTargetForDate } from "@/lib/game/dailyTarget";
@@ -61,7 +61,7 @@ const SpainMap = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex h-full items-center justify-center text-sm text-muted">
-        Cargando mapa…
+        Loading map…
       </div>
     ),
   },
@@ -157,7 +157,7 @@ export function Game({ region = "es" }: GameProps) {
   }, [setDailyLockedSynced]);
 
   const loadDailySession = useCallback(() => {
-    const date = todayInMadrid();
+    const date = todayUtc();
     const challengeNumber = challengeNumberForDate(date);
     const target = dailyTarget(date);
     const saved = loadDailyResult(date, undefined, ns);
@@ -170,7 +170,7 @@ export function Game({ region = "es" }: GameProps) {
     if (saved) {
       setDailyLockedSynced(true);
       setDailyGeometry(saved.geometry);
-      setDailyCountdown(msUntilNextMadridMidnight());
+      setDailyCountdown(msUntilNextUtcMidnight());
       dispatch({
         type: "new-target",
         target,
@@ -234,7 +234,7 @@ export function Game({ region = "es" }: GameProps) {
       setStreak(nextStreak);
       setDailyGeometry(geometry);
       setDailyLockedSynced(true);
-      setDailyCountdown(msUntilNextMadridMidnight());
+      setDailyCountdown(msUntilNextUtcMidnight());
       track({
         name: "daily_attempt_confirmed",
         target,
@@ -286,7 +286,7 @@ export function Game({ region = "es" }: GameProps) {
         dispatch({
           type: "data-error",
           message:
-            "Los datos de población están tardando demasiado. Revisa tu conexión y recarga la página.",
+            "The population data is taking too long. Check your connection and reload the page.",
         });
       }
     }, 45_000);
@@ -312,7 +312,7 @@ export function Game({ region = "es" }: GameProps) {
       window.clearTimeout(timeout);
       dispatch({
         type: "data-error",
-        message: "El módulo de cálculo no ha podido iniciarse.",
+        message: "The calculation engine couldn't start. Reload the page.",
       });
     };
 
@@ -421,7 +421,7 @@ export function Game({ region = "es" }: GameProps) {
 
   return (
     <div className="flex h-dvh flex-col">
-      <GameHeader region={region} />
+      <GameHeader />
       <div className="px-4 pt-1 [@media(max-height:380px)]:pt-0.5">
         <ModeSwitch mode={mode} onChange={handleModeChange} />
       </div>
@@ -458,21 +458,21 @@ export function Game({ region = "es" }: GameProps) {
             className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-line bg-white/95 px-3 py-1.5 text-xs text-muted shadow-sm"
             role="status"
           >
-            Cargando datos de población…
+            Loading population data…
           </div>
         )}
 
         {/* Error de datos */}
         {state.phase === "data-error" && (
           <div className="absolute inset-x-4 top-4 mx-auto max-w-md rounded-xl border border-line bg-white p-4 text-sm shadow-lg">
-            <p className="font-medium">No se han podido cargar los datos</p>
+            <p className="font-medium">Couldn&apos;t load the data</p>
             <p className="mt-1 text-muted">{state.errorMessage}</p>
             <button
               type="button"
               onClick={() => window.location.reload()}
               className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-deep"
             >
-              Recargar
+              Reload
             </button>
           </div>
         )}
@@ -497,7 +497,7 @@ export function Game({ region = "es" }: GameProps) {
               data-testid="check-button"
               className="pointer-events-auto w-full max-w-sm rounded-[15px] bg-accent px-6 py-3.5 font-display text-base font-bold uppercase tracking-wide text-white shadow-btn transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {checking ? "Calculando…" : "Comprobar"}
+              {checking ? "Counting…" : "Check"}
             </button>
           </div>
         )}

@@ -8,11 +8,11 @@ test("una partida básica: dibujar, comprobar y ver resultado", async ({
   page,
 }) => {
   // Objetivo fijo en la URL para que la partida sea reproducible
-  await page.goto("/?objetivo=10000000");
+  await page.goto("/spain?objetivo=10000000");
 
   // El objetivo aparece formateado en español
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "10.000.000",
+    "10,000,000",
     { timeout: 20_000 },
   );
 
@@ -46,6 +46,6 @@ test("una partida básica: dibujar, comprobar y ver resultado", async ({
   await expect(page.getByTestId("score")).not.toHaveText("");
 
   // Puede reintentar: el panel desaparece y vuelve el botón Comprobar
-  await page.getByRole("button", { name: "Intentar de nuevo" }).click();
+  await page.getByRole("button", { name: "Try again" }).click();
   await expect(check).toBeVisible({ timeout: 10_000 });
 });

@@ -8,7 +8,10 @@ Cuanto más te acerques al objetivo, más puntos (0–1000).
 A pesar del nombre provisional, **el cálculo nunca usa provincias**: la
 unidad mínima es la **celda de una rejilla de población** de ~1 km de lado.
 
-## Modo Mundo (`/mundo`)
+## Modo Mundo (`/`, por defecto)
+
+La web es global y en inglés: `/` es el mundo y España queda en `/spain`.
+El reto diario cambia a medianoche UTC, igual para todo el planeta.
 
 El mismo juego sobre todo el planeta, con la rejilla **GHS-POP 2025** de la
 Comisión Europea (JRC), 1 km, proyección Mollweide de áreas iguales.

@@ -1,17 +1,17 @@
-const nf = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
-const pf = new Intl.NumberFormat("es-ES", {
+const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const pf = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
-/** 10000000 → "10.000.000" */
+/** 10000000 → "10,000,000" */
 export function formatInt(n: number): string {
   return nf.format(Math.round(n));
 }
 
-/** 2.579 → "2,58 %" */
+/** 2.579 → "2.58%" */
 export function formatPercent(n: number): string {
-  return `${pf.format(n)} %`;
+  return `${pf.format(n)}%`;
 }
 
 /** 3_723_000 (ms) → "01:02:03" */

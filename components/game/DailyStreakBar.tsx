@@ -15,15 +15,15 @@ export function DailyStreakBar({ current, best }: Props) {
     <div
       className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 pb-2 text-[11px] text-muted sm:px-6 [@media(max-height:380px)]:hidden"
       role="group"
-      aria-label="Racha diaria"
+      aria-label="Daily streak"
     >
       <span className="flex items-center gap-1 whitespace-nowrap">
         <span aria-hidden="true">🔥</span>
         <span className="tabular font-semibold text-ink">{current}</span>
-        <span>{current === 1 ? "día seguido" : "días seguidos"}</span>
+        <span>{current === 1 ? "day in a row" : "days in a row"}</span>
       </span>
       <span className="flex items-center gap-1 whitespace-nowrap">
-        <span>Mejor racha</span>
+        <span>Best streak</span>
         <span className="tabular font-semibold text-ink">{best}</span>
       </span>
     </div>

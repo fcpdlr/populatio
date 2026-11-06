@@ -8,15 +8,15 @@ type Props = {
 };
 
 const OPTIONS: { key: GameMode; label: string }[] = [
-  { key: "daily", label: "Diario" },
-  { key: "practice", label: "Práctica" },
+  { key: "daily", label: "Daily" },
+  { key: "practice", label: "Practice" },
 ];
 
 export function ModeSwitch({ mode, onChange }: Props) {
   return (
     <div
       role="tablist"
-      aria-label="Modo de juego"
+      aria-label="Game mode"
       className="mx-auto flex w-fit items-center gap-0.5 rounded-full border border-line bg-paper p-0.5"
     >
       {OPTIONS.map((opt) => {

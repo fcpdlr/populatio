@@ -82,18 +82,18 @@ const WORLD_VIEWS = {
 } satisfies Record<string, Bounds>;
 
 const WORLD_VIEW_BUTTONS: { key: keyof typeof WORLD_VIEWS; label: string }[] = [
-  { key: "mundo", label: "Mundo" },
-  { key: "europa", label: "Europa" },
+  { key: "mundo", label: "World" },
+  { key: "europa", label: "Europe" },
   { key: "asia", label: "Asia" },
-  { key: "africa", label: "África" },
-  { key: "america", label: "América" },
+  { key: "africa", label: "Africa" },
+  { key: "america", label: "Americas" },
 ];
 
 const VIEW_BUTTONS: { key: keyof typeof VIEWS; label: string }[] = [
-  { key: "peninsula", label: "Península" },
-  { key: "baleares", label: "Baleares" },
-  { key: "canarias", label: "Canarias" },
-  { key: "ceutaMelilla", label: "Ceuta y Melilla" },
+  { key: "peninsula", label: "Mainland" },
+  { key: "baleares", label: "Balearics" },
+  { key: "canarias", label: "Canaries" },
+  { key: "ceutaMelilla", label: "Ceuta & Melilla" },
 ];
 
 /** Latitud de referencia para la corrección de aspecto (centro aprox. de España). */
@@ -308,6 +308,8 @@ export function SpainMap({
   const baseScaleRef = useRef(1);
   const pointersRef = useRef<Map<number, PointerPoint>>(new Map());
   const pinchRef = useRef<{ distance: number; midX: number; midY: number } | null>(null);
+  /** Arrastre del mapa con el botón derecho o central del ratón (escritorio). */
+  const panRef = useRef<{ x: number; y: number } | null>(null);
   const outlineRef = useRef<Feature<Polygon | MultiPolygon> | null>(null);
   const colorsRef = useRef<ThemeColors>(FALLBACK_COLORS);
   const polygonRef = useRef<Polygon | MultiPolygon | null>(null);
@@ -690,7 +692,7 @@ export function SpainMap({
 
     fetch(isWorld ? "/world/map.json" : "/data/spain-outline.geojson")
       .then((res) => {
-        if (!res.ok) throw new Error("No se ha podido descargar el contorno.");
+        if (!res.ok) throw new Error("Couldn't download the map.");
         return res.json();
       })
       .then((data) => {
@@ -714,8 +716,8 @@ export function SpainMap({
         if (!cancelled) {
           setMapError(
             isWorld
-              ? "No se ha podido cargar el mapa del mundo. Recarga la página."
-              : "No se ha podido cargar el mapa de España. Recarga la página.",
+              ? "Couldn't load the world map. Reload the page."
+              : "Couldn't load the map of Spain. Reload the page.",
           );
         }
       });
@@ -852,7 +854,19 @@ export function SpainMap({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (disabledRef.current || !mapReady) return;
+      if (!mapReady) return;
+      // Botón derecho o central: mover el mapa, también con el dibujo bloqueado.
+      if (e.pointerType === "mouse" && (e.button === 1 || e.button === 2)) {
+        e.preventDefault();
+        try {
+          canvasRef.current?.setPointerCapture(e.pointerId);
+        } catch {
+          // no es crítico
+        }
+        panRef.current = screenPointFromEvent(e);
+        return;
+      }
+      if (disabledRef.current) return;
       e.preventDefault();
       try {
         canvasRef.current?.setPointerCapture(e.pointerId);
@@ -885,6 +899,23 @@ export function SpainMap({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (panRef.current) {
+        e.preventDefault();
+        const pt = screenPointFromEvent(e);
+        const camera = cameraRef.current;
+        const dx = pt.x - panRef.current.x;
+        const dy = pt.y - panRef.current.y;
+        panRef.current = pt;
+        const centerLat = camera.centerLat + dy / camera.scale;
+        cameraRef.current = {
+          ...camera,
+          centerLng: camera.centerLng - dx / (camera.scale * camera.k),
+          centerLat,
+          k: isWorld ? kFor("world", centerLat) : camera.k,
+        };
+        draw();
+        return;
+      }
       if (pointersRef.current.has(e.pointerId)) {
         pointersRef.current.set(e.pointerId, screenPointFromEvent(e));
       }
@@ -952,6 +983,10 @@ export function SpainMap({
       } catch {
         // El navegador puede haber liberado ya la captura; no es crítico.
       }
+      if (panRef.current) {
+        panRef.current = null;
+        return;
+      }
       pointersRef.current.delete(e.pointerId);
 
       if (pointersRef.current.size >= 2) {
@@ -1005,8 +1040,8 @@ export function SpainMap({
           ref={canvasRef}
           aria-label={
             isWorld
-              ? "Mapa del mundo. Arrastra con el dedo o el ratón para dibujar una zona; pellizca con dos dedos para acercarte."
-              : "Mapa de España. Arrastra con el dedo o el ratón para dibujar una zona."
+              ? "World map. Drag with your finger or mouse to draw a zone; pinch or scroll to zoom."
+              : "Map of Spain. Drag with your finger or mouse to draw a zone."
           }
           className="touch-none"
           style={{ display: "block", cursor: disabled ? "default" : "crosshair" }}
@@ -1014,6 +1049,7 @@ export function SpainMap({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onContextMenu={(e) => e.preventDefault()}
         />
       </div>
 
@@ -1022,7 +1058,7 @@ export function SpainMap({
           className="absolute inset-0 flex items-center justify-center bg-paper/70 text-sm text-muted"
           role="status"
         >
-          Cargando mapa…
+          Loading map…
         </div>
       )}
 
@@ -1034,6 +1070,9 @@ export function SpainMap({
 
       {mapReady && !mapError && (
         <>
+          <p className="pointer-events-none absolute bottom-1 right-2 text-[9px] text-muted/80">
+            {isWorld ? "Population: GHSL · EC JRC · Map: Natural Earth" : "Population: INE"}
+          </p>
           <DrawingControls
             hasSelection={hasSelection}
             disabled={disabled}
@@ -1048,15 +1087,15 @@ export function SpainMap({
                 className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
               >
                 {densityStatus === "loading"
-                  ? "Cargando densidad…"
+                  ? "Loading density…"
                   : densityOn
-                    ? "Ver mapa sin densidad"
-                    : "Ver densidad"}
+                    ? "Hide density"
+                    : "Show density"}
               </button>
             )}
             {densityStatus === "error" && (
               <p className="max-w-[220px] text-[11px] text-muted">
-                No se ha podido cargar la densidad.
+                Couldn&apos;t load the density layer.
               </p>
             )}
             {provincesAvailable && (
@@ -1067,22 +1106,22 @@ export function SpainMap({
                 className="rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent disabled:cursor-wait disabled:opacity-60"
               >
                 {provincesStatus === "loading"
-                  ? "Cargando provincias…"
+                  ? "Loading provinces…"
                   : provincesOn
-                    ? "Ocultar provincias"
-                    : "Mostrar provincias"}
+                    ? "Hide provinces"
+                    : "Show provinces"}
               </button>
             )}
             {provincesAvailable && provincesStatus === "error" && (
               <p className="max-w-[220px] text-[11px] text-muted">
-                No se ha podido cargar el contorno de provincias.
+                Couldn&apos;t load the province outlines.
               </p>
             )}
           </div>
           <div
             className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
             role="group"
-            aria-label="Ir a un territorio"
+            aria-label="Jump to a region"
           >
             {viewButtons.map(({ key, label }) => (
               <button

@@ -23,7 +23,7 @@ export function loadDensityGrid(): Promise<DensityGrid> {
         fetch("/rejilla.bin"),
       ]);
       if (!metaRes.ok || !dataRes.ok) {
-        throw new Error("No se ha podido cargar la densidad de población.");
+        throw new Error("Couldn't load the population density.");
       }
       const raw = (await metaRes.json()) as RawGridMeta;
       const meta = parseGridMeta(raw);

@@ -123,7 +123,7 @@ export class WorldEstimator implements PopulationEstimator {
     this.coarse = await this.load("world_10km.bin.gz");
     const { width, height } = this.index.coarse;
     if (this.coarse.length !== width * height) {
-      throw new Error("La rejilla mundial de 10 km está incompleta.");
+      throw new Error("The 10 km world grid is incomplete.");
     }
   }
 
@@ -186,7 +186,7 @@ export class WorldEstimator implements PopulationEstimator {
       total = sum / scale_1km;
     } else {
       const coarse = this.coarse;
-      if (!coarse) throw new Error("Los datos todavía no están listos.");
+      if (!coarse) throw new Error("The data isn't ready yet.");
       const { factor, width: cw, height: ch } = this.index.coarse;
       scanCells(rings, x0, y0, cell * factor, ch, cw, (row, c0, c1) => {
         const base = row * cw;
