@@ -12,6 +12,7 @@ import type { AnyMode } from "@/lib/game/modeStorage";
 import type { MapOverlay } from "./SpainMap";
 import { ShareButton } from "./ShareButton";
 import { roundSquares, SITE } from "@/lib/share";
+import { shareUrl } from "@/lib/shareLink";
 
 /**
  * Guess: ves una zona dibujada en el mapa y estimas cuánta gente vive dentro.
@@ -26,6 +27,12 @@ const BEST_KEY = "populatio:guess:best";
 
 type Zone = { geometry: Polygon; population: number; region: Region };
 type Answer = { guess: number; score: number };
+
+/** Paso de la barra más cercano a una cifra (inversa de toValue, sin redondear). */
+const toStep = (value: number) => {
+  const v = Math.min(MAX, Math.max(MIN, value));
+  return Math.round(((Math.log(v) - Math.log(MIN)) / (Math.log(MAX) - Math.log(MIN))) * STEPS);
+};
 
 const toValue = (step: number) => {
   const v = Math.exp(Math.log(MIN) + (step / STEPS) * (Math.log(MAX) - Math.log(MIN)));
@@ -54,6 +61,9 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [step, setStep] = useState(STEPS / 2);
+  /** Cifra escrita a mano: manda sobre la barra hasta que se vuelve a mover. */
+  const [typed, setTyped] = useState<number | null>(null);
+  const [text, setText] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [answered, setAnswered] = useState(false);
   const [best, setBest] = useState(0);
@@ -75,6 +85,8 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
       setZone(z);
       setZoneKey((k) => k + 1);
       setStep(STEPS / 2);
+      setTyped(null);
+      setText(null);
       setAnswered(false);
     } catch (e) {
       nextRef.current = null;
@@ -93,7 +105,20 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  const guess = toValue(step);
+  const guess = typed ?? toValue(step);
+
+  const onType = (raw: string) => {
+    setText(raw);
+    const digits = raw.replace(/[^\d]/g, "");
+    const n = digits ? Number(digits) : NaN;
+    if (Number.isFinite(n) && n > 0) {
+      const clamped = Math.min(2_000_000_000, n);
+      setTyped(clamped);
+      setStep(toStep(clamped));
+    } else {
+      setTyped(null);
+    }
+  };
   const total = answers.reduce((s, a) => s + a.score, 0);
   const finished = answered && round === ROUNDS;
 
@@ -189,13 +214,23 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
                   <label htmlFor="guess-slider" className="text-xs font-medium uppercase tracking-wide text-muted">
                     Your guess
                   </label>
-                  <output
-                    htmlFor="guess-slider"
-                    className="font-display tabular text-2xl font-extrabold text-ink"
+                  <input
+                    id="guess-number"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    aria-label="Type your guess"
                     data-testid="guess-value"
-                  >
-                    {formatInt(guess)}
-                  </output>
+                    value={text ?? formatInt(guess)}
+                    onChange={(e) => onType(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => setText(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submit();
+                    }}
+                    disabled={!zone || loading}
+                    className="w-44 rounded-lg border border-line bg-paper px-2 py-1 text-right font-display tabular text-2xl font-extrabold text-ink focus:border-accent focus:outline-none"
+                  />
                 </div>
                 <input
                   id="guess-slider"
@@ -203,7 +238,11 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
                   min={0}
                   max={STEPS}
                   value={step}
-                  onChange={(e) => setStep(Number(e.target.value))}
+                  onChange={(e) => {
+                    setStep(Number(e.target.value));
+                    setTyped(null);
+                    setText(null);
+                  }}
                   className="mt-3 w-full accent-[var(--color-accent)]"
                   disabled={!zone || loading}
                 />
@@ -256,7 +295,12 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
                           [
                             `${SITE} Guess 🌍`,
                             `${roundSquares(answers.map((a) => a.score))} ${formatInt(total)}/${formatInt(ROUNDS * 1000)}`,
-                            window.location.origin,
+                            "",
+                            shareUrl(window.location.origin, {
+                              m: "g",
+                              s: total,
+                              q: answers.map((a) => Math.min(9, Math.round(a.score / 100))).join(","),
+                            }),
                           ].join("\n")
                         }
                       />

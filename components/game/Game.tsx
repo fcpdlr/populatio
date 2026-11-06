@@ -41,6 +41,7 @@ import { Onboarding } from "./Onboarding";
 import { makeDensityRequester } from "@/lib/population/densityClient";
 import type { DensityRequest } from "@/lib/population/density";
 import { drawShareText, drawShareImage, type DrawShare } from "@/lib/share";
+import { packSilhouette, shareUrl } from "@/lib/shareLink";
 import {
   todayUtc,
   msUntilNextUtcMidnight,
@@ -481,12 +482,25 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
     const r = state.result;
     if (!r) return null;
     const origin = typeof window !== "undefined" ? window.location.origin : "https://populat.io";
+    const geometry = (isDaily && dailyLocked ? dailyGeometry : selectionRef.current) ?? dailyGeometry;
+    const sil = geometry ? packSilhouette(geometry) : null;
+    const daily = isDaily && dailyInfo;
     return {
-      label: isDaily && dailyInfo ? `Daily #${dailyInfo.challengeNumber}` : "Practice",
+      label: daily ? `Daily #${dailyInfo.challengeNumber}` : "Practice",
       target: r.targetPopulation,
       estimated: r.estimatedPopulation,
       score: r.score,
-      url: isDaily || !round ? origin : `${origin}/${roundToSearch(round)}`,
+      // Enlace con tarjeta de imagen; el de Practice reabre la misma ronda.
+      url: shareUrl(origin, {
+        m: daily ? "d" : "p",
+        n: daily ? dailyInfo.challengeNumber : undefined,
+        t: r.targetPopulation,
+        e: r.estimatedPopulation,
+        s: r.score,
+        r: !daily && round ? round.region.id : undefined,
+        g: sil?.g,
+        a: sil?.a,
+      }),
     };
   };
   const shareInfo = {

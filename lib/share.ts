@@ -39,6 +39,7 @@ export function drawShareText(s: DrawShare): string {
     `🎯 ${formatInt(s.target)}`,
     `✏️ ${formatInt(s.estimated)} (${signedPercent(s.estimated, s.target)})`,
     `${scoreBar(s.score)} ${formatInt(s.score)}/1000`,
+    "",
     s.url,
   ].join("\n");
 }

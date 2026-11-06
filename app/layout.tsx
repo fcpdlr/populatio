@@ -22,6 +22,7 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://populat.io"),
   title: "populat.io — draw the population",
   description:
     "We give you a number of people. Draw a zone anywhere on Earth that holds exactly that many.",
