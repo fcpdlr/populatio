@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 test("world: draw a zone over Europe and get a result", async ({ page }) => {
-  await page.goto("/?objetivo=74000000");
+  await page.goto("/?r=europe&objetivo=74000000");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("74,000,000");
   await expect(page.getByText("Loading population data…")).toHaveCount(0, { timeout: 45_000 });
 
-  await page.getByRole("button", { name: "Europe" }).click();
+  await page.waitForTimeout(300);
   await page.waitForTimeout(700);
 
   const map = page.getByTestId("world-map");

@@ -8,18 +8,25 @@ import {
 import { WorldEstimator, type WorldIndex } from "@/lib/population/worldEstimator";
 import type { PopulationEstimate, PopulationEstimator } from "@/lib/population/types";
 import { gunzipSync } from "fflate";
+import { sampleZone, sampleZonePair, type Bounds } from "@/lib/population/zoneSampler";
 
 export type WorkerRequest =
   | { type: "init"; region?: "es" | "world" }
-  | { type: "estimate"; id: number; geometry: Polygon | MultiPolygon };
+  | { type: "estimate"; id: number; geometry: Polygon | MultiPolygon }
+  | { type: "sample"; id: number; kind: "single" | "pair"; bounds: Bounds };
+
+export type SampledZoneMessage = { geometry: Polygon; population: number };
 
 export type WorkerResponse =
   | { type: "ready"; cellCount: number; totalPopulation: number }
   | { type: "init-error"; message: string }
   | { type: "estimate-result"; id: number; estimate: PopulationEstimate }
-  | { type: "estimate-error"; id: number; message: string };
+  | { type: "estimate-error"; id: number; message: string }
+  | { type: "sample-result"; id: number; zones: SampledZoneMessage[] }
+  | { type: "sample-error"; id: number; message: string };
 
 let estimator: PopulationEstimator | null = null;
+let worldEstimator: WorldEstimator | null = null;
 
 const WORLD_BASE = "/world/tiles/";
 
@@ -38,6 +45,7 @@ async function initWorld(): Promise<void> {
     const world = new WorldEstimator(index, fetchGzipU32);
     await world.init();
     estimator = world;
+    worldEstimator = world;
     post({ type: "ready", cellCount: Object.keys(index.tiles).length, totalPopulation: index.total });
   } catch (err) {
     post({
@@ -84,6 +92,31 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (msg.type === "init") {
     if (msg.region === "world") await initWorld();
     else await init();
+    return;
+  }
+  if (msg.type === "sample") {
+    if (!worldEstimator) {
+      post({ type: "sample-error", id: msg.id, message: "The data isn't ready yet." });
+      return;
+    }
+    try {
+      const cells = worldEstimator.populatedCells();
+      const zones =
+        msg.kind === "pair"
+          ? await sampleZonePair(worldEstimator, cells, msg.bounds)
+          : [await sampleZone(worldEstimator, cells, msg.bounds)];
+      post({
+        type: "sample-result",
+        id: msg.id,
+        zones: zones.map((z) => ({ geometry: z.geometry, population: z.population })),
+      });
+    } catch (err) {
+      post({
+        type: "sample-error",
+        id: msg.id,
+        message: err instanceof Error ? err.message : "Couldn't build a zone.",
+      });
+    }
     return;
   }
   if (msg.type === "estimate") {

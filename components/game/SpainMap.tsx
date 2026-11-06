@@ -30,13 +30,30 @@ export type SpainMapProps = {
    * puede editar; combínalo con `disabled`.
    */
   lockedGeometry?: Polygon | MultiPolygon | null;
+  /**
+   * Encuadre al que mover la cámara. Se aplica cada vez que cambia
+   * `focusKey` (p. ej. al empezar una ronda nueva), no en cada render.
+   */
+  focusBounds?: Bounds | null;
+  focusKey?: string | number;
+  /** Zonas de solo lectura a mostrar (modos Guess y More or Less). */
+  overlays?: MapOverlay[];
+  /** Oculta los botones de encuadre por continente. */
+  hideViewButtons?: boolean;
+};
+
+export type MapOverlay = {
+  geometry: Polygon | MultiPolygon;
+  /** "a" usa el color de acento; "b", el color secundario. */
+  tone: "a" | "b";
+  label?: string;
 };
 
 type DensityStatus = "idle" | "loading" | "ready" | "error";
 type ProvincesStatus = "idle" | "loading" | "ready" | "error";
 
 type LngLat = readonly [number, number];
-type Bounds = readonly [LngLat, LngLat]; // [suroeste, noreste]
+export type Bounds = readonly [LngLat, LngLat]; // [suroeste, noreste]
 
 /** Encuadres rápidos por territorio. */
 const VIEWS = {
@@ -153,6 +170,7 @@ type ThemeColors = {
   mapLandLine: string;
   densityRgb: string;
   provinceLine: string;
+  zoneB: string;
 };
 
 const FALLBACK_COLORS: ThemeColors = {
@@ -168,6 +186,7 @@ const FALLBACK_COLORS: ThemeColors = {
   mapLandLine: "#dedbd0",
   densityRgb: "44, 55, 66",
   provinceLine: "#c9ccce",
+  zoneB: "#c2410c",
 };
 
 function readThemeColors(): ThemeColors {
@@ -190,6 +209,7 @@ function readThemeColors(): ThemeColors {
     mapLandLine: read("--color-map-land-line", FALLBACK_COLORS.mapLandLine),
     densityRgb: read("--map-density-rgb", FALLBACK_COLORS.densityRgb),
     provinceLine: read("--color-province-line", FALLBACK_COLORS.provinceLine),
+    zoneB: read("--color-zone-b", FALLBACK_COLORS.zoneB),
   };
 }
 
@@ -297,6 +317,10 @@ export function SpainMap({
   disabled = false,
   showDensityToggle = false,
   lockedGeometry = null,
+  focusBounds = null,
+  focusKey,
+  overlays,
+  hideViewButtons = false,
 }: SpainMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -305,6 +329,12 @@ export function SpainMap({
   const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1, k: REF_COS_LAT });
   const worldRef = useRef<WorldMap | null>(null);
   const isWorld = region === "world";
+  const overlaysRef = useRef<MapOverlay[]>([]);
+  const focusRef = useRef<Bounds | null>(focusBounds);
+  // Declarado antes que el resto de efectos: se actualiza antes de que estos lo lean.
+  useEffect(() => {
+    focusRef.current = focusBounds;
+  }, [focusBounds]);
   const baseScaleRef = useRef(1);
   const pointersRef = useRef<Map<number, PointerPoint>>(new Map());
   const pinchRef = useRef<{ distance: number; midX: number; midY: number } | null>(null);
@@ -494,6 +524,40 @@ export function SpainMap({
       ctx.stroke();
     }
 
+    // Zonas de solo lectura (Guess / More or Less)
+    for (const ov of overlaysRef.current) {
+      const color = ov.tone === "a" ? colors.accent : colors.zoneB;
+      const rings = ringsOf(ov.geometry);
+      ctx.beginPath();
+      let sx = 0, sy = 0, n = 0;
+      for (const ring of rings) {
+        ring.forEach(([lng, lat], idx) => {
+          const [x, y] = proj(lng, lat);
+          sx += x; sy += y; n++;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+      }
+      ctx.fillStyle = color + "33";
+      ctx.fill("evenodd");
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      if (ov.label && n > 0) {
+        const cx = sx / n, cy = sy / n;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 13, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 14px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(ov.label, cx, cy + 0.5);
+      }
+    }
+
     // Selección cerrada
     const polygon = polygonRef.current;
     if (polygon) {
@@ -578,6 +642,13 @@ export function SpainMap({
       const initialCamera = isWorld
         ? cameraForBounds(WORLD_VIEWS.mundo, width, height, "world")
         : cameraForBounds(VIEWS.peninsula, width, height);
+      // El zoom se limita respecto al mapa completo, aunque arranquemos en una región.
+      baseScaleRef.current = initialCamera.scale;
+      if (focusRef.current) {
+        cameraRef.current = cameraForBounds(focusRef.current, width, height, region);
+        draw();
+        return;
+      }
       cameraRef.current = initialCamera;
       baseScaleRef.current = initialCamera.scale;
     }
@@ -683,6 +754,20 @@ export function SpainMap({
     setHasSelection(true);
     draw();
   }, [lockedGeometry, draw]);
+
+  useEffect(() => {
+    overlaysRef.current = overlays ?? [];
+    draw();
+  }, [overlays, draw]);
+
+  // Nuevo encuadre al cambiar de ronda
+  useEffect(() => {
+    if (focusKey === undefined || !focusRef.current) return;
+    const { width, height } = sizeRef.current;
+    if (width <= 0 || height <= 0) return; // el primer resize ya aplica el encuadre
+    animateTo(cameraForBounds(focusRef.current, width, height, region));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey]);
 
   // Carga del contorno de España y arranque del canvas
   useEffect(() => {
@@ -866,7 +951,23 @@ export function SpainMap({
         panRef.current = screenPointFromEvent(e);
         return;
       }
-      if (disabledRef.current) return;
+      if (disabledRef.current) {
+        // Sin dibujo: un dedo mueve el mapa y dos hacen zoom.
+        e.preventDefault();
+        try {
+          canvasRef.current?.setPointerCapture(e.pointerId);
+        } catch {
+          // no es crítico
+        }
+        pointersRef.current.set(e.pointerId, screenPointFromEvent(e));
+        if (pointersRef.current.size >= 2) {
+          panRef.current = null;
+          pinchRef.current = pinchStateFromPointers(pointersRef.current);
+        } else {
+          panRef.current = screenPointFromEvent(e);
+        }
+        return;
+      }
       e.preventDefault();
       try {
         canvasRef.current?.setPointerCapture(e.pointerId);
@@ -985,6 +1086,7 @@ export function SpainMap({
       }
       if (panRef.current) {
         panRef.current = null;
+        pointersRef.current.delete(e.pointerId);
         return;
       }
       pointersRef.current.delete(e.pointerId);
@@ -1119,6 +1221,7 @@ export function SpainMap({
             )}
           </div>
           <div
+            hidden={hideViewButtons}
             className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
             role="group"
             aria-label="Jump to a region"

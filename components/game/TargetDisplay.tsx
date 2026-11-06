@@ -7,15 +7,19 @@ type Props = {
   onNewTarget?: () => void;
   /** Número del reto diario (p. ej. 142). Si se indica, sustituye el kicker habitual. */
   dailyChallengeNumber?: number;
+  /** Región de la ronda (modo Mundo). */
+  regionName?: string;
 };
 
-export function TargetDisplay({ target, onNewTarget, dailyChallengeNumber }: Props) {
+export function TargetDisplay({ target, onNewTarget, dailyChallengeNumber, regionName }: Props) {
   return (
     <div className="flex flex-col items-center px-4 pb-2 pt-1 text-center sm:pb-3 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
         {dailyChallengeNumber != null
-          ? `Daily challenge #${dailyChallengeNumber}`
-          : "Draw a zone with exactly"}
+          ? `Daily #${dailyChallengeNumber}${regionName ? ` · ${regionName}` : ""}`
+          : regionName
+            ? `${regionName} · draw exactly`
+            : "Draw a zone with exactly"}
       </p>
       <h1 className="font-display tabular font-extrabold leading-none tracking-tight text-ink [font-size:clamp(2.75rem,15vw,4.5rem)] [@media(max-height:380px)]:[font-size:2rem]">
         {formatInt(target)}

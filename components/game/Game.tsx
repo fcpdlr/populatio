@@ -28,7 +28,15 @@ import {
   loadBest,
   saveIfBest,
 } from "@/lib/game/storage";
-import { loadMode, saveMode, type GameMode } from "@/lib/game/modeStorage";
+import { loadMode, saveMode, type GameMode, type AnyMode } from "@/lib/game/modeStorage";
+import {
+  randomRound,
+  dailyRound,
+  roundFromSearch,
+  roundToSearch,
+  type Round,
+} from "@/lib/game/regions";
+import { ALL_MODE_OPTIONS } from "./ModeSwitch";
 import {
   todayUtc,
   msUntilNextUtcMidnight,
@@ -72,9 +80,15 @@ type DailyInfo = { date: string; challengeNumber: number };
 type GameProps = {
   /** España (por defecto) o el mundo entero: cambia mapa, datos y objetivos. */
   region?: MapRegion;
+  /** Modo con el que arrancar (lo decide la página que contiene el juego). */
+  initialMode?: GameMode;
+  /** Si se indica, el selector muestra también Guess y More or Less. */
+  onOtherMode?: (mode: "guess" | "duel") => void;
 };
 
-export function Game({ region = "es" }: GameProps) {
+export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: GameProps) {
+  const [round, setRound] = useState<Round | null>(null);
+  const [roundKey, setRoundKey] = useState(0);
   const isWorld = region === "world";
   // Espacio de nombres del almacenamiento local: el récord, la racha y el
   // diario del modo Mundo no se mezclan con los de España.
@@ -137,10 +151,19 @@ export function Game({ region = "es" }: GameProps) {
     setDailyLocked(value);
   }, []);
 
-  const loadPracticeSession = useCallback((urlTarget: number | null) => {
-    const target = urlTarget ?? newTarget();
-    if (!urlTarget) {
-      window.history.replaceState(null, "", targetToSearch(target));
+  const loadPracticeSession = useCallback((urlTarget: number | null, urlRound: Round | null = null) => {
+    let target: number;
+    if (isWorld) {
+      const r = urlRound ?? randomRound();
+      setRound(r);
+      setRoundKey((k) => k + 1);
+      target = r.target;
+      window.history.replaceState(null, "", roundToSearch(r));
+    } else {
+      target = urlTarget ?? newTarget();
+      if (!urlTarget) {
+        window.history.replaceState(null, "", targetToSearch(target));
+      }
     }
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
@@ -159,7 +182,13 @@ export function Game({ region = "es" }: GameProps) {
   const loadDailySession = useCallback(() => {
     const date = todayUtc();
     const challengeNumber = challengeNumberForDate(date);
-    const target = dailyTarget(date);
+    let target = dailyTarget(date);
+    if (isWorld) {
+      const r = dailyRound(date);
+      setRound(r);
+      setRoundKey((k) => k + 1);
+      target = r.target;
+    }
     const saved = loadDailyResult(date, undefined, ns);
 
     setDailyInfo({ date, challengeNumber });
@@ -202,11 +231,15 @@ export function Game({ region = "es" }: GameProps) {
   // (enlace compartido); si no, se respeta el modo guardado o Diario por
   // defecto. Se fija en el cliente.
   useEffect(() => {
-    const urlTarget = readUrlTarget(window.location.search);
-    const initialMode: GameMode = urlTarget != null ? "practice" : loadMode() ?? "daily";
+    const urlRound = isWorld ? roundFromSearch(window.location.search) : null;
+    const urlTarget = isWorld ? urlRound?.target ?? null : readUrlTarget(window.location.search);
+    const saved = loadMode();
+    const savedDraw: GameMode | null = saved === "daily" || saved === "practice" ? saved : null;
+    const initialMode: GameMode =
+      urlTarget != null ? "practice" : forcedMode ?? savedDraw ?? "daily";
     setMode(initialMode);
     if (initialMode === "practice") {
-      loadPracticeSession(urlTarget);
+      loadPracticeSession(urlTarget, urlRound);
     } else {
       loadDailySession();
     }
@@ -384,8 +417,17 @@ export function Game({ region = "es" }: GameProps) {
   }, []);
 
   const handleNewTarget = useCallback(() => {
-    const target = newTarget();
-    window.history.replaceState(null, "", targetToSearch(target));
+    let target: number;
+    if (isWorld) {
+      const r = randomRound();
+      setRound(r);
+      setRoundKey((k) => k + 1);
+      target = r.target;
+      window.history.replaceState(null, "", roundToSearch(r));
+    } else {
+      target = newTarget();
+      window.history.replaceState(null, "", targetToSearch(target));
+    }
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
     dispatch({
@@ -399,8 +441,15 @@ export function Game({ region = "es" }: GameProps) {
   }, []);
 
   const handleModeChange = useCallback(
-    (next: GameMode) => {
-      if (next === mode || state.phase === "checking") return;
+    (picked: AnyMode) => {
+      if (picked === mode || state.phase === "checking") return;
+      if (picked === "guess" || picked === "duel") {
+        saveMode(picked);
+        window.history.replaceState(null, "", window.location.pathname);
+        onOtherMode?.(picked);
+        return;
+      }
+      const next: GameMode = picked;
       setMode(next);
       saveMode(next);
       setShowDailyConfirm(false);
@@ -412,7 +461,7 @@ export function Game({ region = "es" }: GameProps) {
         loadDailySession();
       }
     },
-    [mode, state.phase, loadPracticeSession, loadDailySession],
+    [mode, state.phase, loadPracticeSession, loadDailySession, onOtherMode],
   );
 
   const checking = state.phase === "checking";
@@ -423,13 +472,18 @@ export function Game({ region = "es" }: GameProps) {
     <div className="flex h-dvh flex-col">
       <GameHeader />
       <div className="px-4 pt-1 [@media(max-height:380px)]:pt-0.5">
-        <ModeSwitch mode={mode} onChange={handleModeChange} />
+        {onOtherMode ? (
+          <ModeSwitch<AnyMode> mode={mode} onChange={handleModeChange} options={ALL_MODE_OPTIONS} />
+        ) : (
+          <ModeSwitch<AnyMode> mode={mode} onChange={handleModeChange} />
+        )}
       </div>
       {mounted && state.target > 0 ? (
         <TargetDisplay
           target={state.target}
           onNewTarget={isDaily ? undefined : handleNewTarget}
           dailyChallengeNumber={isDaily ? dailyInfo?.challengeNumber : undefined}
+          regionName={isWorld ? round?.region.name : undefined}
         />
       ) : (
         <div className="flex flex-col items-center px-4 pb-2 pt-1 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">
@@ -450,6 +504,8 @@ export function Game({ region = "es" }: GameProps) {
           disabled={checking || state.phase === "data-error" || (isDaily && dailyLocked)}
           showDensityToggle={Boolean(showResult) && !isWorld}
           lockedGeometry={isDaily && dailyLocked ? dailyGeometry : null}
+          focusBounds={isWorld ? round?.region.bounds ?? null : null}
+          focusKey={isWorld ? roundKey : undefined}
         />
 
         {/* Estado de carga de datos */}

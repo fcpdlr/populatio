@@ -1,5 +1,5 @@
 import type { Polygon, MultiPolygon } from "geojson";
-import { mollweide } from "./mollweide";
+import { mollweide, inverseMollweide } from "./mollweide";
 import type { PopulationEstimate, PopulationEstimator } from "./types";
 
 /**
@@ -125,6 +125,36 @@ export class WorldEstimator implements PopulationEstimator {
     if (this.coarse.length !== width * height) {
       throw new Error("The 10 km world grid is incomplete.");
     }
+  }
+
+  private populated: { lng: Float32Array; lat: Float32Array; pop: Float32Array } | null = null;
+
+  /**
+   * Celdas pobladas de la rejilla de 10 km con su posición en grados.
+   * Se calcula una vez, la primera vez que se generan zonas aleatorias.
+   */
+  populatedCells(): { lng: Float32Array; lat: Float32Array; pop: Float32Array } {
+    if (this.populated) return this.populated;
+    const coarse = this.coarse;
+    if (!coarse) throw new Error("The data isn't ready yet.");
+    const { factor, width: cw } = this.index.coarse;
+    const cell = this.index.cell_m * factor;
+    let n = 0;
+    for (let k = 0; k < coarse.length; k++) if (coarse[k] > 0) n++;
+    const lng = new Float32Array(n), lat = new Float32Array(n), pop = new Float32Array(n);
+    let j = 0;
+    for (let k = 0; k < coarse.length; k++) {
+      const v = coarse[k];
+      if (v <= 0) continue;
+      const row = Math.floor(k / cw), col = k - row * cw;
+      const [a, b] = inverseMollweide(
+        this.index.x0 + (col + 0.5) * cell,
+        this.index.y0 - (row + 0.5) * cell,
+      );
+      lng[j] = a; lat[j] = b; pop[j] = v; j++;
+    }
+    this.populated = { lng, lat, pop };
+    return this.populated;
   }
 
   private tile(name: string): Promise<Uint32Array> {

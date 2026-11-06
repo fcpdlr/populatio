@@ -27,3 +27,13 @@ export function mollweide(lng: number, lat: number): [number, number] {
   const y = SQRT2 * MOLLWEIDE_R * Math.sin(theta);
   return [x, y];
 }
+
+/** [x, y] en metros Mollweide -> [lng, lat] en grados (inversa exacta). */
+export function inverseMollweide(x: number, y: number): [number, number] {
+  const s = Math.max(-1, Math.min(1, y / (SQRT2 * MOLLWEIDE_R)));
+  const theta = Math.asin(s);
+  const lat = Math.asin(Math.max(-1, Math.min(1, (2 * theta + Math.sin(2 * theta)) / Math.PI)));
+  const c = Math.cos(theta);
+  const lng = c < 1e-12 ? 0 : (Math.PI * x) / (2 * SQRT2 * MOLLWEIDE_R * c);
+  return [lng / DEG, lat / DEG];
+}
