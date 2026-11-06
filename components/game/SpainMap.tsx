@@ -7,6 +7,9 @@ import { DrawingControls } from "./DrawingControls";
 import { cleanPolygon } from "@/lib/geo/clean";
 import { loadDensityGrid, type DensityGrid } from "@/lib/population/densityGrid";
 import { loadProvinceLines, type ProvinceGeometries } from "@/lib/geo/provinces";
+import type { DensityRequest } from "@/lib/population/density";
+
+const WORLD_DENSITY_BIN_PX = 4;
 
 export type MapRegion = "es" | "world";
 
@@ -40,6 +43,10 @@ export type SpainMapProps = {
   overlays?: MapOverlay[];
   /** Oculta los botones de encuadre por continente. */
   hideViewButtons?: boolean;
+  /** Densidad de población de la vista (mundo): la calcula el worker. */
+  densitySource?: (req: DensityRequest) => Promise<Float32Array>;
+  /** Muestra la capa de densidad (mundo), p. ej. al revelar el resultado. */
+  densityVisible?: boolean;
 };
 
 export type MapOverlay = {
@@ -345,6 +352,8 @@ export function SpainMap({
   focusKey,
   overlays,
   hideViewButtons = false,
+  densitySource,
+  densityVisible = false,
 }: SpainMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -353,6 +362,12 @@ export function SpainMap({
   const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1, k: REF_COS_LAT });
   const worldRef = useRef<WorldMap | null>(null);
   const labelsRef = useRef<MapLabel[] | null>(null);
+  const densitySourceRef = useRef(densitySource);
+  const densityVisibleRef = useRef(densityVisible);
+  const worldDensityRef = useRef<{ key: string; bins: Float32Array; cols: number } | null>(null);
+  const densityTimerRef = useRef<number | null>(null);
+  const densityWantedRef = useRef("");
+  const drawRef = useRef<() => void>(() => {});
   const isWorld = region === "world";
   const overlaysRef = useRef<MapOverlay[]>([]);
   const focusRef = useRef<Bounds | null>(focusBounds);
@@ -477,6 +492,59 @@ export function SpainMap({
       ctx.strokeStyle = colors.provinceLine;
       ctx.lineWidth = 0.75;
       ctx.stroke();
+    }
+
+    // Densidad de población del mundo (solo al revelar el resultado). Se
+    // pide al worker para la vista exacta; mientras llega, no se pinta nada.
+    if (world && densityVisibleRef.current && densitySourceRef.current) {
+      const key = `${camera.centerLng.toFixed(4)}|${camera.centerLat.toFixed(4)}|${camera.scale.toFixed(4)}|${camera.k.toFixed(4)}|${width}|${height}`;
+      const cached = worldDensityRef.current;
+      if (cached && cached.key === key) {
+        const { bins, cols } = cached;
+        let max = 0;
+        for (let i = 0; i < bins.length; i++) if (bins[i] > max) max = bins[i];
+        if (max > 0) {
+          // Escala logarítmica con suelo en max/2000: el campo casi vacío no
+          // se pinta y las ciudades destacan de verdad.
+          const floor = max / 2000;
+          const span = Math.log(max / floor);
+          for (let i = 0; i < bins.length; i++) {
+            const v = bins[i];
+            if (v <= floor) continue;
+            const intensity = Math.log(v / floor) / span;
+            const cx = (i % cols) * WORLD_DENSITY_BIN_PX + WORLD_DENSITY_BIN_PX / 2;
+            const cy = Math.floor(i / cols) * WORLD_DENSITY_BIN_PX + WORLD_DENSITY_BIN_PX / 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 0.4 + 2.1 * intensity, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${colors.densityRgb}, ${(0.06 + 0.84 * intensity * intensity).toFixed(3)})`;
+            ctx.fill();
+          }
+        }
+      } else if (densityWantedRef.current !== key) {
+        densityWantedRef.current = key;
+        if (densityTimerRef.current !== null) window.clearTimeout(densityTimerRef.current);
+        const req: DensityRequest = {
+          centerLng: camera.centerLng,
+          centerLat: camera.centerLat,
+          scale: camera.scale,
+          k: camera.k,
+          width,
+          height,
+          binPx: WORLD_DENSITY_BIN_PX,
+        };
+        const source = densitySourceRef.current;
+        densityTimerRef.current = window.setTimeout(() => {
+          source(req)
+            .then((bins) => {
+              if (densityWantedRef.current !== key) return; // la vista ya cambió
+              worldDensityRef.current = { key, bins, cols: Math.ceil(width / WORLD_DENSITY_BIN_PX) };
+              drawRef.current();
+            })
+            .catch(() => {
+              densityWantedRef.current = "";
+            });
+        }, 140);
+      }
     }
 
     // Etiquetas de países y ciudades (solo mundo). Aparecen según el zoom,
@@ -875,6 +943,24 @@ export function SpainMap({
     overlaysRef.current = overlays ?? [];
     draw();
   }, [overlays, draw]);
+
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
+
+  useEffect(() => {
+    densitySourceRef.current = densitySource;
+  }, [densitySource]);
+
+  // Al mostrar u ocultar la densidad se repinta (y al ocultarla se olvida la caché).
+  useEffect(() => {
+    densityVisibleRef.current = densityVisible;
+    if (!densityVisible) {
+      worldDensityRef.current = null;
+      densityWantedRef.current = "";
+    }
+    draw();
+  }, [densityVisible, draw]);
 
   // Nuevo encuadre al cambiar de ronda. El primero se aplica de golpe (sin
   // viajar desde el mapamundi); los siguientes, con una transición corta.

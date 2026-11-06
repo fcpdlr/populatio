@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test("world: draw a zone over Europe and get a result", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("populatio:onboarded", "1"));
   await page.goto("/?r=europe&objetivo=74000000");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("74,000,000");
   await expect(page.getByText("Loading population data…")).toHaveCount(0, { timeout: 45_000 });
@@ -38,4 +39,19 @@ test("world: draw a zone over Europe and get a result", async ({ page }) => {
   await expect(page.getByTestId("result-panel")).toBeVisible({ timeout: 30_000 });
   const estimated = await page.getByTestId("estimated-population").textContent();
   expect(Number((estimated ?? "0").replace(/,/g, ""))).toBeGreaterThan(0);
+  await expect(page.getByTestId("share-button")).toBeVisible();
+  await expect(page.getByRole("button", { name: /where people live/ })).toBeVisible();
+});
+
+test("first visit shows a three-step guide once", async ({ page }) => {
+  await page.goto("/?r=europe&objetivo=12000000");
+  const guide = page.getByTestId("onboarding");
+  await expect(guide).toBeVisible();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Let’s play" }).click();
+  await expect(guide).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("12,000,000");
+  await expect(page.getByTestId("onboarding")).toHaveCount(0);
 });

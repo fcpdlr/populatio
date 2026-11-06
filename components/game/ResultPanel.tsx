@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatInt, formatPercent, formatCountdown } from "@/lib/format";
+import { ShareButton } from "./ShareButton";
 import type {
   AttemptResult,
   MunicipalityContribution,
@@ -24,6 +25,8 @@ type Props = {
   onNewTarget: () => void;
   /** Cuando se indica, el panel se muestra en modo Diario: sin reintentos, con cuenta atrás. */
   daily?: DailyPanelInfo;
+  /** Si se indica, aparece el botón de compartir el resultado. */
+  share?: { getText: () => string; getImage?: () => Promise<Blob | null> };
 };
 
 // TODO(fernando): sustituye USUARIO por tu usuario real de Buy Me a Coffee.
@@ -85,9 +88,34 @@ export function ResultPanel({
   onRetry,
   onNewTarget,
   daily,
+  share,
 }: Props) {
   const top = contributions.slice(0, 5);
   const remainingMs = useCountdown(daily?.msUntilNext);
+  // Plegado: deja ver el mapa (y dónde vive la gente) sin perder el resultado.
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return (
+      <section
+        aria-label="Attempt result"
+        data-testid="result-panel"
+        className="pointer-events-auto flex w-full items-center justify-between gap-3 rounded-t-2xl border border-line bg-white px-5 py-3 shadow-[0_-4px_24px_rgb(0_0_0/0.08)] sm:max-w-sm sm:rounded-2xl"
+      >
+        <p className="text-sm text-ink">
+          <span className="font-display tabular text-lg font-extrabold text-accent">{formatInt(result.score)}</span>
+          <span className="text-muted"> pts · {formatPercent(result.percentageError)} error</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent"
+        >
+          Show result
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -101,11 +129,21 @@ export function ResultPanel({
             ? `Result · Daily challenge #${daily.challengeNumber}`
             : `Result · attempt ${attempts}`}
         </p>
-        {!daily && isNewBest && (
-          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-deep">
-            New best
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {!daily && isNewBest && (
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-deep">
+              New best
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            data-testid="result-collapse"
+            className="rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-ink hover:border-accent hover:text-accent"
+          >
+            See map
+          </button>
+        </div>
       </div>
 
       <dl className="mt-3 space-y-2 text-sm">
@@ -202,6 +240,12 @@ export function ResultPanel({
           >
             New target
           </button>
+        </div>
+      )}
+
+      {share && (
+        <div className="mt-2">
+          <ShareButton getText={share.getText} getImage={share.getImage} />
         </div>
       )}
 

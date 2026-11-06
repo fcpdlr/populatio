@@ -37,6 +37,10 @@ import {
   type Round,
 } from "@/lib/game/regions";
 import { ALL_MODE_OPTIONS } from "./ModeSwitch";
+import { Onboarding } from "./Onboarding";
+import { makeDensityRequester } from "@/lib/population/densityClient";
+import type { DensityRequest } from "@/lib/population/density";
+import { drawShareText, drawShareImage, type DrawShare } from "@/lib/share";
 import {
   todayUtc,
   msUntilNextUtcMidnight,
@@ -115,6 +119,13 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
   });
 
   const workerRef = useRef<Worker | null>(null);
+  const densityRef = useRef<((req: DensityRequest) => Promise<Float32Array>) | null>(null);
+  const [densityOn, setDensityOn] = useState(true);
+  const densitySource = useCallback(
+    (req: DensityRequest) =>
+      densityRef.current ? densityRef.current(req) : Promise.reject(new Error("not ready")),
+    [],
+  );
   const selectionRef = useRef<Polygon | MultiPolygon | null>(null);
   const requestIdRef = useRef(0);
   const dataReadyRef = useRef(false);
@@ -313,6 +324,7 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
       new URL("../../workers/population.worker.ts", import.meta.url),
     );
     workerRef.current = worker;
+    if (isWorld) densityRef.current = makeDensityRequester(worker);
 
     const timeout = window.setTimeout(() => {
       if (!dataReadyRef.current) {
@@ -464,6 +476,31 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
     [mode, state.phase, loadPracticeSession, loadDailySession, onOtherMode],
   );
 
+  // Datos para compartir el resultado (texto estilo Wordle + silueta dibujada)
+  const shareData = (): DrawShare | null => {
+    const r = state.result;
+    if (!r) return null;
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://populat.io";
+    return {
+      label: isDaily && dailyInfo ? `Daily #${dailyInfo.challengeNumber}` : "Practice",
+      target: r.targetPopulation,
+      estimated: r.estimatedPopulation,
+      score: r.score,
+      url: isDaily || !round ? origin : `${origin}/${roundToSearch(round)}`,
+    };
+  };
+  const shareInfo = {
+    getText: () => {
+      const d = shareData();
+      return d ? drawShareText(d) : "";
+    },
+    getImage: async () => {
+      const d = shareData();
+      const g = (isDaily && dailyLocked ? dailyGeometry : selectionRef.current) ?? dailyGeometry;
+      return d && g ? drawShareImage(g, d) : null;
+    },
+  };
+
   const checking = state.phase === "checking";
   const showResult = state.phase === "result" && state.result;
   const isDaily = mode === "daily";
@@ -503,9 +540,25 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
           disabled={checking || state.phase === "data-error" || (isDaily && dailyLocked)}
           showDensityToggle={Boolean(showResult) && !isWorld}
           lockedGeometry={isDaily && dailyLocked ? dailyGeometry : null}
+          densitySource={isWorld ? densitySource : undefined}
+          densityVisible={isWorld && Boolean(showResult) && densityOn}
           focusBounds={isWorld ? round?.region.bounds ?? null : null}
           focusKey={isWorld ? roundKey : undefined}
         />
+
+        {isWorld && <Onboarding />}
+
+        {/* Revelar dónde vive la gente: densidad tras el resultado (mundo) */}
+        {isWorld && showResult && (
+          <button
+            type="button"
+            onClick={() => setDensityOn((v) => !v)}
+            aria-pressed={densityOn}
+            className="absolute left-3 top-12 rounded-full border border-line bg-white/90 px-3 py-1.5 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent"
+          >
+            {densityOn ? "Hide where people live" : "Show where people live"}
+          </button>
+        )}
 
         {/* Estado de carga de datos */}
         {!dataReady && state.phase !== "data-error" && (
@@ -578,6 +631,7 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
               isNewBest={isNewBest}
               onRetry={handleRetry}
               onNewTarget={handleNewTarget}
+              share={isWorld ? shareInfo : undefined}
               daily={
                 isDaily && dailyInfo
                   ? {

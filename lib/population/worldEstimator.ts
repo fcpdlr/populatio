@@ -109,7 +109,7 @@ export class WorldEstimator implements PopulationEstimator {
   private readonly tileCache = new Map<string, Promise<Uint32Array>>();
 
   constructor(
-    private readonly index: WorldIndex,
+    readonly index: WorldIndex,
     private readonly load: BinaryLoader,
     private readonly maxFineTiles: number = MAX_FINE_TILES,
   ) {}
@@ -157,7 +157,8 @@ export class WorldEstimator implements PopulationEstimator {
     return this.populated;
   }
 
-  private tile(name: string): Promise<Uint32Array> {
+  /** Teselas de 1 km con caché (también las usa el cálculo de densidad). */
+  tile(name: string): Promise<Uint32Array> {
     let p = this.tileCache.get(name);
     if (!p) {
       p = this.load(`1km/${name}.bin.gz`).catch((err) => {
