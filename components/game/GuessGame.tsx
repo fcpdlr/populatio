@@ -13,6 +13,7 @@ import type { MapOverlay } from "./SpainMap";
 import { ShareButton } from "./ShareButton";
 import { roundSquares, SITE } from "@/lib/share";
 import { shareUrl } from "@/lib/shareLink";
+import { track } from "@/lib/analytics/events";
 
 /**
  * Guess: ves una zona dibujada en el mapa y estimas cuánta gente vive dentro.
@@ -130,6 +131,7 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
     setAnswered(true);
     if (round === ROUNDS) {
       const sum = next.reduce((s, a) => s + a.score, 0);
+      track({ name: "guess_finished", score: sum });
       if (sum > best) {
         saveBest(sum);
         setBest(sum);
@@ -291,6 +293,7 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
                   {finished && (
                     <div className="mt-3">
                       <ShareButton
+                        mode="guess"
                         getText={() =>
                           [
                             `${SITE} Guess 🌍`,

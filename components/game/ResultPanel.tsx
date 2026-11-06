@@ -29,34 +29,6 @@ type Props = {
   share?: { getText: () => string; getImage?: () => Promise<Blob | null> };
 };
 
-// TODO(fernando): sustituye USUARIO por tu usuario real de Buy Me a Coffee.
-const SUPPORT_URL = "https://www.buymeacoffee.com/USUARIO";
-
-function CoffeeIcon() {
-  return (
-    <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-      <path
-        d="M4.5 8h9v4a3.5 3.5 0 0 1-3.5 3.5H8A3.5 3.5 0 0 1 4.5 12V8Z"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M13.5 9h1a1.75 1.75 0 0 1 0 3.5h-1"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-      <path
-        d="M7 6.2c0-.6.9-.9.9-1.7S7.2 3 7.2 3M9.8 6.2c0-.6.9-.9.9-1.7S10 3 10 3"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function directionText(result: AttemptResult): string {
   if (result.direction === "exact") return "Exact!";
   const amount = formatInt(result.absoluteDifference);
@@ -245,21 +217,11 @@ export function ResultPanel({
 
       {share && (
         <div className="mt-2">
-          <ShareButton getText={share.getText} getImage={share.getImage} />
+          <ShareButton mode={daily ? "daily" : "practice"} getText={share.getText} getImage={share.getImage} />
         </div>
       )}
 
-      <div className="mt-4 flex justify-center border-t border-line pt-3">
-        <a
-          href={SUPPORT_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-accent"
-        >
-          <CoffeeIcon />
-          Buy me a coffee
-        </a>
-      </div>
+
     </section>
   );
 }

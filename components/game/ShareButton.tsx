@@ -3,20 +3,24 @@
 import { useState } from "react";
 import { shareResult } from "@/lib/share";
 import { xIntentUrl } from "@/lib/shareLink";
+import { track } from "@/lib/analytics/events";
 
 type Props = {
+  /** Modo de juego, para la analítica. */
+  mode?: string;
   getText: () => string;
   getImage?: () => Promise<Blob | null>;
   className?: string;
 };
 
 /** Botón de compartir: hoja nativa en móvil, copiar al portapapeles en ordenador. */
-export function ShareButton({ getText, getImage, className }: Props) {
+export function ShareButton({ mode = "draw", getText, getImage, className }: Props) {
   const [state, setState] = useState<"idle" | "busy" | "copied" | "failed">("idle");
 
   const onClick = async () => {
     if (state === "busy") return;
     setState("busy");
+    track({ name: "share_clicked", mode, channel: "native" });
     const image = getImage ? await getImage().catch(() => null) : null;
     const res = await shareResult(getText(), image);
     setState(res === "copied" ? "copied" : res === "failed" ? "failed" : "idle");
@@ -26,6 +30,7 @@ export function ShareButton({ getText, getImage, className }: Props) {
   // X no admite imágenes desde la web: se publica el texto con el enlace, y
   // el enlace trae su propia tarjeta con imagen.
   const postOnX = () => {
+    track({ name: "share_clicked", mode, channel: "x" });
     window.open(xIntentUrl(getText()), "_blank", "noopener,noreferrer");
   };
 

@@ -27,6 +27,7 @@
     "@turf/simplify": "^7.3.5",
     "@turf/union": "^7.3.5",
     "@turf/unkink-polygon": "^7.3.5",
+    "@vercel/analytics": "^1.5.0",
     "fflate": "^0.8.2",
     "next": "^15.5.20",
     "react": "^19.0.0",

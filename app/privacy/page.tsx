@@ -17,15 +17,15 @@ export default function PrivacyPage() {
         delete them by clearing this site&apos;s data.
       </p>
       <p>
-        We don&apos;t use non-essential cookies. If an analytics tool is added
-        in the future, it will be privacy-friendly, limited to aggregated game
-        events, and this page will be updated to say so.
+        We use Vercel Web Analytics to count visits and a few anonymous game
+        events (for example, a game started, a result shared). It uses no
+        cookies and stores no personal data or IP addresses.
       </p>
       <p>
-        We don&apos;t show ads. The result panel includes an optional support
-        link (&ldquo;Buy me a coffee&rdquo;) that opens an external site in a
-        new tab; showing it shares no data with that platform.
+        Shared result links contain only the numbers of your result and a
+        rough outline of the zone you drew, never anything about you.
       </p>
+      <p>We don&apos;t show ads.</p>
     </StaticPage>
   );
 }
