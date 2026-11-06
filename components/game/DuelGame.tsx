@@ -10,6 +10,7 @@ import { formatInt } from "@/lib/format";
 import { safeStorage } from "@/lib/storage/safeStorage";
 import type { AnyMode } from "@/lib/game/modeStorage";
 import type { MapOverlay } from "./SpainMap";
+import area from "@turf/area";
 
 /**
  * More or Less: dos zonas en el mapa, eliges la que tiene más gente.
@@ -18,7 +19,14 @@ import type { MapOverlay } from "./SpainMap";
 
 const BEST_KEY = "populatio:duel:best";
 
-type Pair = { a: Polygon; b: Polygon; popA: number; popB: number; region: Region };
+type Pair = { a: Polygon; b: Polygon; popA: number; popB: number; areaA: number; areaB: number; region: Region };
+
+/** Superficie en km², redondeada a 2 cifras significativas para leerla de un vistazo. */
+function km2(geometry: Polygon): number {
+  const v = area({ type: "Feature", properties: {}, geometry }) / 1e6;
+  const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(v)) - 1));
+  return Math.round(v / mag) * mag;
+}
 type Pick = "a" | "b";
 
 function loadBest(): number {
@@ -40,7 +48,15 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
   const fetchPair = useCallback(async (): Promise<Pair> => {
     const region = REGIONS[Math.floor(Math.random() * REGIONS.length)];
     const [za, zb] = await sample("pair", region.bounds);
-    return { a: za.geometry, b: zb.geometry, popA: za.population, popB: zb.population, region };
+    return {
+      a: za.geometry,
+      b: zb.geometry,
+      popA: za.population,
+      popB: zb.population,
+      areaA: km2(za.geometry),
+      areaB: km2(zb.geometry),
+      region,
+    };
   }, [sample]);
 
   const showNext = useCallback(async () => {
@@ -112,6 +128,7 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
     const isWrongPick = picked === p && !correct;
     const color = p === "a" ? "var(--color-accent)" : "var(--color-zone-b)";
     const pop = pair ? (p === "a" ? pair.popA : pair.popB) : 0;
+    const sq = pair ? (p === "a" ? pair.areaA : pair.areaB) : 0;
     return (
       <button
         key={p}
@@ -128,7 +145,14 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
         }}
       >
         <span className="block font-display text-2xl font-extrabold leading-none">{p.toUpperCase()}</span>
-        {picked && <span className="mt-1 block tabular text-sm font-semibold">{formatInt(pop)}</span>}
+        {pair && (
+          <span className="mt-1 block tabular text-xs font-medium opacity-90" data-testid={`duel-${p}-area`}>
+            {formatInt(sq)} km²
+          </span>
+        )}
+        {picked && (
+          <span className="mt-0.5 block tabular text-sm font-semibold">{formatInt(pop)} people</span>
+        )}
       </button>
     );
   };
@@ -137,7 +161,7 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
     <ModeShell mode="duel" onMode={onMode}>
       <div className="flex flex-col items-center px-4 pb-2 pt-2 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-          {pair ? `${pair.region.name} · ` : ""}Streak {streak} · Best {best}
+          Streak {streak} · Best {best}
         </p>
         <h1 className="mt-1 font-display text-xl font-extrabold leading-tight tracking-tight text-ink">
           Which zone has more people?

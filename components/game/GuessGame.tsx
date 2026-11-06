@@ -131,8 +131,7 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
     <ModeShell mode="guess" onMode={onMode}>
       <div className="flex flex-col items-center px-4 pb-2 pt-2 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-          Round {round}/{ROUNDS}
-          {zone ? ` · ${zone.region.name}` : ""} · {formatInt(total)} pts
+          Round {round}/{ROUNDS} · {formatInt(total)} pts
         </p>
         <h1 className="mt-1 font-display text-xl font-extrabold leading-tight tracking-tight text-ink">
           How many people live in this zone?

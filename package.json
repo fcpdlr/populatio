@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "data:prepare-world-outline": "node scripts/prepare-world-outline.mjs"
+    "data:prepare-world-outline": "node scripts/prepare-world-outline.mjs",
+    "data:prepare-world-labels": "node scripts/prepare-world-labels.mjs"
   },
   "dependencies": {
     "@turf/area": "^7.3.5",

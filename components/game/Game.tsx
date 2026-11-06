@@ -483,7 +483,6 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
           target={state.target}
           onNewTarget={isDaily ? undefined : handleNewTarget}
           dailyChallengeNumber={isDaily ? dailyInfo?.challengeNumber : undefined}
-          regionName={isWorld ? round?.region.name : undefined}
         />
       ) : (
         <div className="flex flex-col items-center px-4 pb-2 pt-1 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">

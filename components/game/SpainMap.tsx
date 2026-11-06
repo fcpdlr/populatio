@@ -138,6 +138,30 @@ function kFor(region: MapRegion, lat: number): number {
   return Math.cos((clamped * Math.PI) / 180);
 }
 
+type CountryLabel = [name: string, lng: number, lat: number, minZ: number, maxZ: number, rank: number];
+type CityLabel = [name: string, lng: number, lat: number, minZ: number, pop: number];
+type WorldLabels = { countries: CountryLabel[]; cities: CityLabel[] };
+/** Una sola lista ordenada por zoom mínimo: países y capitales grandes compiten en igualdad. */
+type MapLabel = { name: string; lng: number; lat: number; minZ: number; maxZ: number; city: boolean };
+
+function mergeLabels(l: WorldLabels): MapLabel[] {
+  const out: MapLabel[] = [
+    ...l.countries.map(([name, lng, lat, minZ, maxZ]) => ({
+      name: name.toUpperCase(), lng, lat, minZ: minZ - 0.6, maxZ: maxZ + 1, city: false,
+    })),
+    ...l.cities.map(([name, lng, lat, minZ]) => ({
+      name, lng, lat, minZ: minZ + 0.6, maxZ: 99, city: true,
+    })),
+  ];
+  // Estable: dentro del mismo zoom se mantiene el orden de origen (países por rango, ciudades por población).
+  return out.sort((a, b) => a.minZ - b.minZ);
+}
+
+/** Máximo de etiquetas en pantalla: el mapa es para dibujar, no un atlas. */
+const MAX_LABELS = 36;
+/** Margen (px) alrededor de cada etiqueta para que nunca se toquen. */
+const LABEL_GAP = 6;
+
 type WorldMap = {
   land: MultiPolygon;
   borders: MultiLineString;
@@ -328,9 +352,11 @@ export function SpainMap({
   const sizeRef = useRef({ width: 0, height: 0 });
   const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1, k: REF_COS_LAT });
   const worldRef = useRef<WorldMap | null>(null);
+  const labelsRef = useRef<MapLabel[] | null>(null);
   const isWorld = region === "world";
   const overlaysRef = useRef<MapOverlay[]>([]);
   const focusRef = useRef<Bounds | null>(focusBounds);
+  const firstFocusRef = useRef(true);
   // Declarado antes que el resto de efectos: se actualiza antes de que estos lo lean.
   useEffect(() => {
     focusRef.current = focusBounds;
@@ -442,6 +468,82 @@ export function SpainMap({
       ctx.stroke();
     }
 
+    // Etiquetas de países y ciudades (solo mundo). Aparecen según el zoom,
+    // con la misma escala que los mapas web, y nunca se solapan: se colocan
+    // por prioridad y se descarta cualquiera que choque con una ya puesta.
+    const labels = labelsRef.current;
+    if (world && labels) {
+      const z = Math.log2((camera.scale * camera.k * 360) / 256);
+      const placed: [number, number, number, number][] = [];
+      const fits = (x0: number, y0: number, x1: number, y1: number) => {
+        if (x0 < 4 || y0 < 4 || x1 > width - 4 || y1 > height - 4) return false;
+        for (const [a, b, c, d] of placed) {
+          if (x0 < c + LABEL_GAP && x1 + LABEL_GAP > a && y0 < d + LABEL_GAP && y1 + LABEL_GAP > b) return false;
+        }
+        return true;
+      };
+      const halo = (text: string, x: number, y: number, fill: string) => {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = colors.mapLand;
+        ctx.strokeText(text, x, y);
+        ctx.fillStyle = fill;
+        ctx.fillText(text, x, y);
+      };
+      ctx.textBaseline = "middle";
+
+      // Las zonas del jugador y las del juego son obstáculos: ninguna etiqueta las pisa.
+      // (las zonas con letra A/B reservan además el hueco de la etiqueta, encima)
+      const obstacles: [Polygon | MultiPolygon, number][] = overlaysRef.current.map((o) => [
+        o.geometry,
+        o.label ? 32 : 0,
+      ]);
+      if (polygonRef.current) obstacles.push([polygonRef.current, 0]);
+      for (const [g, extraTop] of obstacles) {
+        let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+        for (const ring of ringsOf(g)) for (const [lng, lat] of ring) {
+          const [x, y] = proj(lng, lat);
+          if (x < a) a = x;
+          if (y < b) b = y;
+          if (x > c) c = x;
+          if (y > d) d = y;
+        }
+        placed.push([a, b - extraTop, c, d]);
+      }
+      const reserved = placed.length;
+
+      const countryFont = "600 9.5px system-ui, -apple-system, 'Segoe UI', sans-serif";
+      const cityFont = "500 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+      for (const l of labels) {
+        if (placed.length - reserved >= MAX_LABELS) break;
+        if (z < l.minZ) break; // lista ordenada por zoom mínimo: el resto tampoco cabe
+        if (z > l.maxZ) continue;
+        if (l.lng < vLng0 || l.lng > vLng1 || l.lat < vLat0 || l.lat > vLat1) continue;
+        const [x, y] = proj(l.lng, l.lat);
+        if (l.city) {
+          ctx.font = cityFont;
+          const w = ctx.measureText(l.name).width;
+          if (!fits(x - 3, y - 7, x + 6 + w, y + 7)) continue;
+          placed.push([x - 3, y - 7, x + 6 + w, y + 7]);
+          ctx.beginPath();
+          ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = colors.ink;
+          ctx.globalAlpha = 0.55;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.textAlign = "left";
+          halo(l.name, x + 6, y, colors.ink + "b3");
+        } else {
+          ctx.font = countryFont;
+          const w = ctx.measureText(l.name).width;
+          if (!fits(x - w / 2, y - 6, x + w / 2, y + 6)) continue;
+          placed.push([x - w / 2, y - 6, x + w / 2, y + 6]);
+          ctx.textAlign = "center";
+          halo(l.name, x, y, colors.muted);
+        }
+      }
+    }
+
     // Densidad de población (solo en el resultado, nunca durante el dibujo).
     // Se agrega la población en una rejilla de píxeles antes de pintar: así
     // cada celda contribuye una sola vez por bin y no se satura de negro por
@@ -529,11 +631,12 @@ export function SpainMap({
       const color = ov.tone === "a" ? colors.accent : colors.zoneB;
       const rings = ringsOf(ov.geometry);
       ctx.beginPath();
-      let sx = 0, sy = 0, n = 0;
+      let sx = 0, n = 0, top = Infinity;
       for (const ring of rings) {
         ring.forEach(([lng, lat], idx) => {
           const [x, y] = proj(lng, lat);
-          sx += x; sy += y; n++;
+          sx += x; n++;
+          if (y < top) top = y;
           if (idx === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         });
@@ -545,7 +648,8 @@ export function SpainMap({
       ctx.lineWidth = 2;
       ctx.stroke();
       if (ov.label && n > 0) {
-        const cx = sx / n, cy = sy / n;
+        // La etiqueta va encima de la zona, nunca sobre ella: no tapa lo que hay que mirar.
+        const cx = sx / n, cy = top - 17;
         ctx.beginPath();
         ctx.arc(cx, cy, 13, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -645,6 +749,7 @@ export function SpainMap({
       // El zoom se limita respecto al mapa completo, aunque arranquemos en una región.
       baseScaleRef.current = initialCamera.scale;
       if (focusRef.current) {
+        firstFocusRef.current = false;
         cameraRef.current = cameraForBounds(focusRef.current, width, height, region);
         draw();
         return;
@@ -760,12 +865,20 @@ export function SpainMap({
     draw();
   }, [overlays, draw]);
 
-  // Nuevo encuadre al cambiar de ronda
+  // Nuevo encuadre al cambiar de ronda. El primero se aplica de golpe (sin
+  // viajar desde el mapamundi); los siguientes, con una transición corta.
   useEffect(() => {
     if (focusKey === undefined || !focusRef.current) return;
     const { width, height } = sizeRef.current;
     if (width <= 0 || height <= 0) return; // el primer resize ya aplica el encuadre
-    animateTo(cameraForBounds(focusRef.current, width, height, region));
+    const target = cameraForBounds(focusRef.current, width, height, region);
+    if (firstFocusRef.current) {
+      firstFocusRef.current = false;
+      cameraRef.current = target;
+      draw();
+      return;
+    }
+    animateTo(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
 
@@ -783,6 +896,16 @@ export function SpainMap({
       .then((data) => {
         if (cancelled) return;
         if (isWorld) {
+          fetch("/world/labels.json")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((l: WorldLabels | null) => {
+              if (cancelled || !l) return;
+              labelsRef.current = mergeLabels(l);
+              draw();
+            })
+            .catch(() => {
+              // Sin etiquetas el mapa sigue funcionando.
+            });
           const { land, borders } = data as { land: MultiPolygon; borders: MultiLineString };
           worldRef.current = {
             land,
