@@ -14,6 +14,7 @@ import area from "@turf/area";
 import { ShareButton } from "./ShareButton";
 import { SITE } from "@/lib/share";
 import { shareUrl } from "@/lib/shareLink";
+import { track } from "@/lib/analytics/events";
 
 /**
  * More or Less: dos zonas en el mapa, eliges la que tiene más gente.
@@ -96,6 +97,7 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
   const choose = (p: Pick) => {
     if (!pair || picked) return;
     setPicked(p);
+    if (p !== winner) track({ name: "duel_over", streak });
     if (p === winner) {
       const s = streak + 1;
       setStreak(s);
@@ -215,6 +217,7 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
           {over && (
             <div className="mt-3">
               <ShareButton
+                mode="duel"
                 getText={() =>
                   [
                     `${SITE} More or Less 🌍`,

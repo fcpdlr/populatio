@@ -2,7 +2,7 @@ const MADRID_TIME_ZONE = "Europe/Madrid";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Fecha del primer reto diario (reto #1). */
-export const DAILY_LAUNCH_DATE = "2026-01-01";
+export const DAILY_LAUNCH_DATE = "2026-11-06";
 
 /** Fecha (YYYY-MM-DD) del día actual en Europe/Madrid, no en la hora local del dispositivo. */
 export function todayInMadrid(now: Date = new Date()): string {

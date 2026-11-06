@@ -1,3 +1,4 @@
+import { track as vercelTrack } from "@vercel/analytics";
 /**
  * Abstracción mínima de analítica.
  *
@@ -24,14 +25,21 @@ export type AnalyticsEvent =
       challengeNumber: number;
       score: number;
       streak: number;
-    };
+    }
+  | { name: "guess_finished"; score: number }
+  | { name: "duel_over"; streak: number }
+  | { name: "share_clicked"; mode: string; channel: "native" | "x" };
 
 type Transport = (event: AnalyticsEvent) => void;
 
+/** Por defecto, Vercel Web Analytics (sin cookies). En desarrollo, a la consola. */
 let transport: Transport = (event) => {
   if (process.env.NODE_ENV === "development") {
     console.debug("[analytics]", event.name, event);
+    return;
   }
+  const { name, ...props } = event;
+  vercelTrack(name, props as Record<string, string | number | boolean>);
 };
 
 export function setAnalyticsTransport(t: Transport): void {
