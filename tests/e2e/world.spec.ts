@@ -8,7 +8,19 @@ test("world: draw a zone over Europe and get a result", async ({ page }) => {
   await page.waitForTimeout(300);
   await page.waitForTimeout(700);
 
+  // Por defecto arrastrar mueve el mapa: sin pulsar Draw no hay zona.
   const map = page.getByTestId("world-map");
+  const b0 = await map.boundingBox();
+  if (!b0) throw new Error("The map has no size");
+  await page.mouse.move(b0.x + b0.width * 0.5, b0.y + b0.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(b0.x + b0.width * 0.3, b0.y + b0.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  await page.getByTestId("check-button").click();
+  await expect(page.getByText("Tap Draw, then drag on the map")).toBeVisible();
+  await expect(page.getByTestId("result-panel")).toHaveCount(0);
+
+  await page.getByTestId("draw-toggle").click();
   const box = await map.boundingBox();
   if (!box) throw new Error("The map has no size");
   const cx = box.x + box.width * 0.4;

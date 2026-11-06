@@ -535,7 +535,7 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
         {/* Mensajes de validación */}
         {validationMessage && (
           <div
-            className="absolute inset-x-4 bottom-24 mx-auto max-w-sm rounded-xl border border-line bg-white p-3 text-center text-sm shadow-lg"
+            className="pointer-events-none absolute inset-x-4 top-12 mx-auto max-w-sm rounded-xl border border-line bg-white p-3 text-center text-sm shadow-lg"
             role="alert"
           >
             {validationMessage}

@@ -371,6 +371,16 @@ export function SpainMap({
   const polygonRef = useRef<Polygon | MultiPolygon | null>(null);
   const pathRef = useRef<LngLat[]>([]);
   const drawingRef = useRef(false);
+  /**
+   * Modo dibujo: por defecto un dedo mueve el mapa; el botón Draw activa el
+   * dibujo para el siguiente trazo, que al terminar devuelve el mapa a mover.
+   */
+  const drawModeRef = useRef(false);
+  const [drawMode, setDrawModeState] = useState(false);
+  const setDrawMode = useCallback((on: boolean) => {
+    drawModeRef.current = on;
+    setDrawModeState(on);
+  }, []);
   const animRef = useRef<number | null>(null);
   const selectionChangeRef = useRef(onSelectionChange);
   const disabledRef = useRef(disabled);
@@ -398,7 +408,8 @@ export function SpainMap({
 
   useEffect(() => {
     disabledRef.current = disabled;
-  }, [disabled]);
+    if (disabled) setDrawMode(false);
+  }, [disabled, setDrawMode]);
 
   const draw = useCallback(() => {
     const ctx = ctxRef.current;
@@ -1020,6 +1031,7 @@ export function SpainMap({
   const commitDrawnPath = useCallback(() => {
     const raw = pathRef.current;
     pathRef.current = [];
+    setDrawMode(false);
 
     if (raw.length < 3) {
       polygonRef.current = null;
@@ -1058,7 +1070,7 @@ export function SpainMap({
     setHasSelection(true);
     selectionChangeRef.current(polygon);
     draw();
-  }, [draw]);
+  }, [draw, setDrawMode]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1074,8 +1086,8 @@ export function SpainMap({
         panRef.current = screenPointFromEvent(e);
         return;
       }
-      if (disabledRef.current) {
-        // Sin dibujo: un dedo mueve el mapa y dos hacen zoom.
+      if (disabledRef.current || !drawModeRef.current) {
+        // Fuera del modo dibujo: un dedo mueve el mapa y dos hacen zoom.
         e.preventDefault();
         try {
           canvasRef.current?.setPointerCapture(e.pointerId);
@@ -1265,7 +1277,7 @@ export function SpainMap({
           ref={canvasRef}
           aria-label={
             isWorld
-              ? "World map. Drag with your finger or mouse to draw a zone; pinch or scroll to zoom."
+              ? "World map. Drag to move, pinch or scroll to zoom. Use the Draw button to draw a zone."
               : "Map of Spain. Drag with your finger or mouse to draw a zone."
           }
           className="touch-none"
@@ -1303,6 +1315,37 @@ export function SpainMap({
             disabled={disabled}
             onClear={clearSelection}
           />
+          {!disabled && (
+            <button
+              type="button"
+              onClick={() => setDrawMode(!drawMode)}
+              aria-pressed={drawMode}
+              data-testid="draw-toggle"
+              className={`absolute bottom-20 right-3 flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold shadow-btn transition-colors ${
+                drawMode
+                  ? "border-2 border-accent bg-white text-accent"
+                  : "bg-ink text-paper hover:bg-accent"
+              }`}
+            >
+              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" aria-hidden="true">
+                <path
+                  d="M4 16l1-4 8.5-8.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L8 15l-4 1Z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {drawMode ? "Cancel" : hasSelection ? "Redraw" : "Draw"}
+            </button>
+          )}
+          {drawMode && (
+            <p
+              className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink/85 px-3 py-1.5 text-xs font-medium text-paper"
+              role="status"
+            >
+              Drag on the map to draw your zone
+            </p>
+          )}
           <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5">
             {showDensityToggle && (
               <button
@@ -1344,8 +1387,8 @@ export function SpainMap({
             )}
           </div>
           <div
-            hidden={hideViewButtons}
-            className="absolute bottom-20 left-3 flex flex-wrap gap-1.5"
+            hidden={hideViewButtons || drawMode}
+            className="absolute left-3 right-16 top-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]"
             role="group"
             aria-label="Jump to a region"
           >
@@ -1354,7 +1397,7 @@ export function SpainMap({
                 key={key}
                 type="button"
                 onClick={() => goTo(key)}
-                className="rounded-full border border-line bg-white/90 px-2.5 py-1 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent"
+                className="shrink-0 rounded-full border border-line bg-white/90 px-2.5 py-1 text-[11px] font-medium text-ink shadow-sm backdrop-blur hover:border-accent hover:text-accent"
               >
                 {label}
               </button>
