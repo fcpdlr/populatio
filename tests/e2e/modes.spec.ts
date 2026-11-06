@@ -5,7 +5,13 @@ test("guess: a zone appears, a guess is scored", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("tab", { name: "Guess" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("guess-submit")).toBeEnabled({ timeout: 45_000 });
+  const field = page.getByTestId("guess-value");
+  await field.click();
+  await field.fill("1234567");
+  await field.blur();
+  await expect(field).toHaveValue("1,234,567");
   await page.getByTestId("guess-submit").click();
+  await expect(page.getByTestId("guess-result")).toContainText("1,234,567");
   await expect(page.getByTestId("guess-result")).toContainText("Actual");
   await page.getByRole("button", { name: "Next zone" }).click();
   await expect(page.getByText(/Round 2\/5/)).toBeVisible();

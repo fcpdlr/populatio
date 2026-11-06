@@ -13,6 +13,7 @@ import type { MapOverlay } from "./SpainMap";
 import area from "@turf/area";
 import { ShareButton } from "./ShareButton";
 import { SITE } from "@/lib/share";
+import { shareUrl } from "@/lib/shareLink";
 
 /**
  * More or Less: dos zonas en el mapa, eliges la que tiene más gente.
@@ -215,7 +216,12 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
             <div className="mt-3">
               <ShareButton
                 getText={() =>
-                  [`${SITE} More or Less 🌍`, `🔥 Streak ${streak} · Best ${best}`, window.location.origin].join("\n")
+                  [
+                    `${SITE} More or Less 🌍`,
+                    `🔥 Streak ${streak} · Best ${best}`,
+                    "",
+                    shareUrl(window.location.origin, { m: "l", k: streak }),
+                  ].join("\n")
                 }
               />
             </div>

@@ -40,6 +40,19 @@ test("world: draw a zone over Europe and get a result", async ({ page }) => {
   const estimated = await page.getByTestId("estimated-population").textContent();
   expect(Number((estimated ?? "0").replace(/,/g, ""))).toBeGreaterThan(0);
   await expect(page.getByTestId("share-button")).toBeVisible();
+  await expect(page.getByTestId("post-on-x")).toBeVisible();
+  // Sin red hacia x.com en los tests: se captura la URL que se abriría.
+  await page.evaluate(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url: string) => {
+      (window as unknown as { __opened: string[] }).__opened.push(url);
+      return null;
+    }) as typeof window.open;
+  });
+  await page.getByTestId("post-on-x").click();
+  const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened[0]);
+  expect(opened).toContain("x.com/intent/tweet");
+  expect(decodeURIComponent(opened)).toContain("/r?d=");
   await expect(page.getByRole("button", { name: /where people live/ })).toBeVisible();
 });
 
