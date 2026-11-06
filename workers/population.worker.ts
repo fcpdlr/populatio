@@ -15,7 +15,8 @@ export type WorkerRequest =
   | { type: "init"; region?: "es" | "world" }
   | { type: "estimate"; id: number; geometry: Polygon | MultiPolygon }
   | { type: "sample"; id: number; kind: "single" | "pair"; bounds: Bounds }
-  | { type: "density"; id: number; req: DensityRequest };
+  | { type: "density"; id: number; req: DensityRequest }
+  | { type: "prefetch"; geometry: Polygon | MultiPolygon };
 
 export type SampledZoneMessage = { geometry: Polygon; population: number };
 
@@ -96,6 +97,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (msg.type === "init") {
     if (msg.region === "world") await initWorld();
     else await init();
+    return;
+  }
+  if (msg.type === "prefetch") {
+    if (worldEstimator) void worldEstimator.prefetch(msg.geometry).catch(() => {});
     return;
   }
   if (msg.type === "density") {

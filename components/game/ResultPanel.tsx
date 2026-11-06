@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatInt, formatPercent, formatCountdown } from "@/lib/format";
 import { ShareButton } from "./ShareButton";
+import { scoreLabel } from "@/lib/population/score";
 import type {
   AttemptResult,
   MunicipalityContribution,
@@ -27,6 +28,8 @@ type Props = {
   daily?: DailyPanelInfo;
   /** Si se indica, aparece el botón de compartir el resultado. */
   share?: { getText: () => string; getImage?: () => Promise<Blob | null> };
+  /** Daily: repetir la misma ronda en Practice para afinar la intuición. */
+  onPracticeSame?: () => void;
 };
 
 function directionText(result: AttemptResult): string {
@@ -61,6 +64,7 @@ export function ResultPanel({
   onNewTarget,
   daily,
   share,
+  onPracticeSame,
 }: Props) {
   const top = contributions.slice(0, 5);
   const remainingMs = useCountdown(daily?.msUntilNext);
@@ -148,8 +152,14 @@ export function ResultPanel({
           >
             {formatInt(result.score)}
           </p>
+          <p className="text-xs font-semibold text-ink" data-testid="score-label">
+            {scoreLabel(result.score)}
+          </p>
         </div>
       </div>
+      <p className="mt-1.5 text-[11px] text-muted">
+        Points depend on how close you get: 10% off ≈ 720, 20% off ≈ 510, 50% off ≈ 190.
+      </p>
 
       {!daily && best && (
         <p className="mt-2 text-xs text-muted">
@@ -195,6 +205,16 @@ export function ResultPanel({
           >
             {formatCountdown(remainingMs)}
           </p>
+          {onPracticeSame && (
+            <button
+              type="button"
+              onClick={onPracticeSame}
+              data-testid="practice-same"
+              className="mt-2 w-full rounded-xl border border-line bg-white px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+            >
+              Retry this round in Practice
+            </button>
+          )}
         </div>
       ) : (
         <div className="mt-4 flex gap-2">

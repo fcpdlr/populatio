@@ -122,6 +122,8 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
   const workerRef = useRef<Worker | null>(null);
   const densityRef = useRef<((req: DensityRequest) => Promise<Float32Array>) | null>(null);
   const [densityOn, setDensityOn] = useState(true);
+  /** Ayuda opcional en Practice: ver la densidad antes de dibujar. */
+  const [hintOn, setHintOn] = useState(false);
   const densitySource = useCallback(
     (req: DensityRequest) =>
       densityRef.current ? densityRef.current(req) : Promise.reject(new Error("not ready")),
@@ -379,6 +381,8 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
       selectionRef.current = geometry;
       setValidationMessage(null);
       if (geometry && !hadSelection) track({ name: "polygon_drawn" });
+      // Adelanta la descarga de los datos que hará falta al pulsar Check.
+      if (geometry && isWorld) workerRef.current?.postMessage({ type: "prefetch", geometry });
       dispatch({ type: "selection-changed", hasSelection: geometry !== null });
     },
     [],
@@ -515,6 +519,17 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
     },
   };
 
+  // Daily → Practice con la misma región y cifra, para repetir y aprender.
+  const handlePracticeSame = () => {
+    if (!round || state.phase === "checking") return;
+    setMode("practice");
+    saveMode("practice");
+    setShowDailyConfirm(false);
+    setHintOn(false);
+    track({ name: "mode_changed", mode: "practice" });
+    loadPracticeSession(round.target, round);
+  };
+
   const checking = state.phase === "checking";
   const showResult = state.phase === "result" && state.result;
   const isDaily = mode === "daily";
@@ -555,12 +570,29 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
           showDensityToggle={Boolean(showResult) && !isWorld}
           lockedGeometry={isDaily && dailyLocked ? dailyGeometry : null}
           densitySource={isWorld ? densitySource : undefined}
-          densityVisible={isWorld && Boolean(showResult) && densityOn}
+          densityVisible={
+            isWorld && ((Boolean(showResult) && densityOn) || (!isDaily && !showResult && hintOn))
+          }
           focusBounds={isWorld ? round?.region.bounds ?? null : null}
           focusKey={isWorld ? roundKey : undefined}
         />
 
         {isWorld && <Onboarding />}
+
+        {/* Ayuda opcional en Practice antes de dibujar */}
+        {isWorld && !isDaily && !showResult && (
+          <button
+            type="button"
+            onClick={() => setHintOn((v) => !v)}
+            aria-pressed={hintOn}
+            data-testid="hint-toggle"
+            className={`absolute left-3 top-12 rounded-full border px-3 py-1.5 text-[11px] font-medium shadow-sm backdrop-blur ${
+              hintOn ? "border-accent bg-accent-soft text-accent-deep" : "border-line bg-white/90 text-ink hover:border-accent hover:text-accent"
+            }`}
+          >
+            {hintOn ? "Hint on: where people live" : "Hint: show where people live"}
+          </button>
+        )}
 
         {/* Revelar dónde vive la gente: densidad tras el resultado (mundo) */}
         {isWorld && showResult && (
@@ -646,6 +678,7 @@ export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: Ga
               onRetry={handleRetry}
               onNewTarget={handleNewTarget}
               share={isWorld ? shareInfo : undefined}
+              onPracticeSame={isWorld && isDaily && round ? handlePracticeSame : undefined}
               daily={
                 isDaily && dailyInfo
                   ? {
