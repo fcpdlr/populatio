@@ -10,6 +10,8 @@ import { formatInt } from "@/lib/format";
 import { safeStorage } from "@/lib/storage/safeStorage";
 import type { AnyMode } from "@/lib/game/modeStorage";
 import type { MapOverlay } from "./SpainMap";
+import { ShareButton } from "./ShareButton";
+import { roundSquares, SITE } from "@/lib/share";
 
 /**
  * Guess: ves una zona dibujada en el mapa y estimas cuánta gente vive dentro.
@@ -45,7 +47,7 @@ function saveBest(n: number) {
 }
 
 export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
-  const { ready, error, sample } = useWorldWorker();
+  const { ready, error, sample, density } = useWorldWorker();
   const [round, setRound] = useState(1);
   const [zone, setZone] = useState<Zone | null>(null);
   const [zoneKey, setZoneKey] = useState(0);
@@ -144,6 +146,8 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
           onSelectionChange={() => {}}
           disabled
           overlays={overlays}
+          densitySource={density}
+          densityVisible={answered}
           focusBounds={zone ? framingBounds([zone.geometry], 1.4) : null}
           focusKey={zoneKey}
           hideViewButtons
@@ -244,6 +248,19 @@ export function GuessGame({ onMode }: { onMode: (m: AnyMode) => void }) {
                   </div>
                   {finished && (
                     <p className="mt-2 text-xs text-muted">Best game: {formatInt(Math.max(best, total))} points</p>
+                  )}
+                  {finished && (
+                    <div className="mt-3">
+                      <ShareButton
+                        getText={() =>
+                          [
+                            `${SITE} Guess 🌍`,
+                            `${roundSquares(answers.map((a) => a.score))} ${formatInt(total)}/${formatInt(ROUNDS * 1000)}`,
+                            window.location.origin,
+                          ].join("\n")
+                        }
+                      />
+                    </div>
                   )}
                   <button
                     type="button"

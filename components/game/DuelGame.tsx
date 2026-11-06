@@ -11,6 +11,8 @@ import { safeStorage } from "@/lib/storage/safeStorage";
 import type { AnyMode } from "@/lib/game/modeStorage";
 import type { MapOverlay } from "./SpainMap";
 import area from "@turf/area";
+import { ShareButton } from "./ShareButton";
+import { SITE } from "@/lib/share";
 
 /**
  * More or Less: dos zonas en el mapa, eliges la que tiene más gente.
@@ -35,7 +37,7 @@ function loadBest(): number {
 }
 
 export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
-  const { ready, error, sample } = useWorldWorker();
+  const { ready, error, sample, density } = useWorldWorker();
   const [pair, setPair] = useState<Pair | null>(null);
   const [pairKey, setPairKey] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -174,6 +176,8 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
           onSelectionChange={() => {}}
           disabled
           overlays={overlays}
+          densitySource={density}
+          densityVisible={picked !== null}
           focusBounds={pair ? framingBounds([pair.a, pair.b], 0.8) : null}
           focusKey={pairKey}
           hideViewButtons
@@ -207,6 +211,15 @@ export function DuelGame({ onMode }: { onMode: (m: AnyMode) => void }) {
           aria-label="Pick a zone"
         >
           <div className="flex gap-3">{(["a", "b"] as Pick[]).map(btn)}</div>
+          {over && (
+            <div className="mt-3">
+              <ShareButton
+                getText={() =>
+                  [`${SITE} More or Less 🌍`, `🔥 Streak ${streak} · Best ${best}`, window.location.origin].join("\n")
+                }
+              />
+            </div>
+          )}
           {picked && (
             <div className="mt-3 flex items-center justify-between gap-3" data-testid="duel-result">
               <p className="text-sm font-semibold text-ink">

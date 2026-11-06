@@ -9,11 +9,13 @@ import { WorldEstimator, type WorldIndex } from "@/lib/population/worldEstimator
 import type { PopulationEstimate, PopulationEstimator } from "@/lib/population/types";
 import { gunzipSync } from "fflate";
 import { sampleZone, sampleZonePair, type Bounds } from "@/lib/population/zoneSampler";
+import { densityBins, type DensityRequest } from "@/lib/population/density";
 
 export type WorkerRequest =
   | { type: "init"; region?: "es" | "world" }
   | { type: "estimate"; id: number; geometry: Polygon | MultiPolygon }
-  | { type: "sample"; id: number; kind: "single" | "pair"; bounds: Bounds };
+  | { type: "sample"; id: number; kind: "single" | "pair"; bounds: Bounds }
+  | { type: "density"; id: number; req: DensityRequest };
 
 export type SampledZoneMessage = { geometry: Polygon; population: number };
 
@@ -23,7 +25,9 @@ export type WorkerResponse =
   | { type: "estimate-result"; id: number; estimate: PopulationEstimate }
   | { type: "estimate-error"; id: number; message: string }
   | { type: "sample-result"; id: number; zones: SampledZoneMessage[] }
-  | { type: "sample-error"; id: number; message: string };
+  | { type: "sample-error"; id: number; message: string }
+  | { type: "density-result"; id: number; bins: Float32Array }
+  | { type: "density-error"; id: number; message: string };
 
 let estimator: PopulationEstimator | null = null;
 let worldEstimator: WorldEstimator | null = null;
@@ -92,6 +96,27 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (msg.type === "init") {
     if (msg.region === "world") await initWorld();
     else await init();
+    return;
+  }
+  if (msg.type === "density") {
+    if (!worldEstimator) {
+      post({ type: "density-error", id: msg.id, message: "The data isn't ready yet." });
+      return;
+    }
+    try {
+      const w = worldEstimator;
+      const bins = await densityBins(w, w.index, (n) => w.tile(n), msg.req);
+      (self as unknown as Worker).postMessage(
+        { type: "density-result", id: msg.id, bins } satisfies WorkerResponse,
+        [bins.buffer],
+      );
+    } catch (err) {
+      post({
+        type: "density-error",
+        id: msg.id,
+        message: err instanceof Error ? err.message : "Couldn't compute the density.",
+      });
+    }
     return;
   }
   if (msg.type === "sample") {
