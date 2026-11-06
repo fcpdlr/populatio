@@ -99,7 +99,8 @@ export async function sampleZonePair(
   for (let attempt = 0; attempt < 30; attempt++) {
     const a = await sampleZone(est, cells, bounds, random);
     // B se busca cerca de A: así las dos zonas se ven grandes en el mismo encuadre.
-    const reachKm = Math.max(250, a.radiusKm * 7);
+    // El alcance escala con el tamaño de A: zonas pequeñas, vecinas cercanas.
+    const reachKm = Math.max(60, a.radiusKm * 6);
     const dLat = reachKm / KM_PER_DEG;
     const dLng = reachKm / (KM_PER_DEG * Math.max(0.2, Math.cos((a.center[1] * Math.PI) / 180)));
     const near: Bounds = [
