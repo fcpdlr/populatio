@@ -14,7 +14,8 @@
     "data:prepare-outline": "node scripts/prepare-outline.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "data:prepare-world-outline": "node scripts/prepare-world-outline.mjs"
   },
   "dependencies": {
     "@turf/area": "^7.3.5",
@@ -25,6 +26,7 @@
     "@turf/simplify": "^7.3.5",
     "@turf/union": "^7.3.5",
     "@turf/unkink-polygon": "^7.3.5",
+    "fflate": "^0.8.2",
     "next": "^15.5.20",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -44,6 +46,7 @@
     "tailwindcss": "^4.1.0",
     "topojson-client": "^3.1.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "world-atlas": "^2.0.2"
   }
 }

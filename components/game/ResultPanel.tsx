@@ -55,11 +55,11 @@ function CoffeeIcon() {
 }
 
 function directionText(result: AttemptResult): string {
-  if (result.direction === "exact") return "Exacto";
+  if (result.direction === "exact") return "Exact!";
   const amount = formatInt(result.absoluteDifference);
   return result.direction === "over"
-    ? `Te has pasado por ${amount} habitantes`
-    : `Te has quedado corto por ${amount} habitantes`;
+    ? `${amount} people too many`
+    : `${amount} people short`;
 }
 
 /** Cuenta atrás hasta el próximo reto, actualizada cada segundo a partir del snapshot recibido. */
@@ -91,30 +91,30 @@ export function ResultPanel({
 
   return (
     <section
-      aria-label="Resultado del intento"
+      aria-label="Attempt result"
       data-testid="result-panel"
       className="pointer-events-auto w-full rounded-t-2xl border border-line bg-white p-5 shadow-[0_-4px_24px_rgb(0_0_0/0.08)] sm:max-w-sm sm:rounded-2xl sm:shadow-lg"
     >
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs font-medium uppercase tracking-wide text-muted">
           {daily
-            ? `Resultado · Reto diario #${daily.challengeNumber}`
-            : `Resultado · intento ${attempts}`}
+            ? `Result · Daily challenge #${daily.challengeNumber}`
+            : `Result · attempt ${attempts}`}
         </p>
         {!daily && isNewBest && (
           <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-deep">
-            Mejor intento
+            New best
           </span>
         )}
       </div>
 
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex items-baseline justify-between">
-          <dt className="text-muted">Objetivo</dt>
+          <dt className="text-muted">Target</dt>
           <dd className="tabular font-medium">{formatInt(result.targetPopulation)}</dd>
         </div>
         <div className="flex items-baseline justify-between">
-          <dt className="text-muted">Tu selección</dt>
+          <dt className="text-muted">Your zone</dt>
           <dd className="tabular font-medium" data-testid="estimated-population">
             {formatInt(result.estimatedPopulation)}
           </dd>
@@ -131,7 +131,7 @@ export function ResultPanel({
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] uppercase tracking-wide text-muted">Puntuación</p>
+          <p className="text-[11px] uppercase tracking-wide text-muted">Score</p>
           <p
             className="font-display tabular text-3xl font-extrabold text-accent"
             data-testid="score"
@@ -143,15 +143,15 @@ export function ResultPanel({
 
       {!daily && best && (
         <p className="mt-2 text-xs text-muted">
-          Mejor intento: {formatInt(best.score)} puntos (
-          {formatPercent(best.percentageError)} de error)
+          Best attempt: {formatInt(best.score)} points (
+          {formatPercent(best.percentageError)} error)
         </p>
       )}
 
       {daily && (
         <p className="mt-2 text-xs text-muted">
-          🔥 Racha: {daily.streak.current}{" "}
-          {daily.streak.current === 1 ? "día" : "días"} · Mejor racha:{" "}
+          🔥 Streak: {daily.streak.current}{" "}
+          {daily.streak.current === 1 ? "day" : "days"} · Best streak:{" "}
           {daily.streak.best}
         </p>
       )}
@@ -159,7 +159,7 @@ export function ResultPanel({
       {top.length > 0 && (
         <details className="mt-3 text-xs text-muted">
           <summary className="cursor-pointer select-none hover:text-ink">
-            Municipios que más aportan
+            Top municipalities
           </summary>
           <ul className="mt-2 space-y-1">
             {top.map((m) => (
@@ -177,7 +177,7 @@ export function ResultPanel({
       {daily ? (
         <div className="mt-4 rounded-xl bg-paper p-3 text-center">
           <p className="text-xs text-muted">
-            Próximo reto <strong className="text-ink">#{daily.nextChallengeNumber}</strong> en
+            Next challenge <strong className="text-ink">#{daily.nextChallengeNumber}</strong> in
           </p>
           <p
             className="tabular mt-0.5 text-lg font-semibold text-ink"
@@ -193,14 +193,14 @@ export function ResultPanel({
             onClick={onRetry}
             className="flex-1 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-deep"
           >
-            Intentar de nuevo
+            Try again
           </button>
           <button
             type="button"
             onClick={onNewTarget}
             className="flex-1 rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
           >
-            Nuevo objetivo
+            New target
           </button>
         </div>
       )}
@@ -213,7 +213,7 @@ export function ResultPanel({
           className="flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-accent"
         >
           <CoffeeIcon />
-          Invítame a un café
+          Buy me a coffee
         </a>
       </div>
     </section>

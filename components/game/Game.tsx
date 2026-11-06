@@ -28,10 +28,18 @@ import {
   loadBest,
   saveIfBest,
 } from "@/lib/game/storage";
-import { loadMode, saveMode, type GameMode } from "@/lib/game/modeStorage";
+import { loadMode, saveMode, type GameMode, type AnyMode } from "@/lib/game/modeStorage";
 import {
-  todayInMadrid,
-  msUntilNextMadridMidnight,
+  randomRound,
+  dailyRound,
+  roundFromSearch,
+  roundToSearch,
+  type Round,
+} from "@/lib/game/regions";
+import { ALL_MODE_OPTIONS } from "./ModeSwitch";
+import {
+  todayUtc,
+  msUntilNextUtcMidnight,
   challengeNumberForDate,
 } from "@/lib/game/dailyDate";
 import { dailyTargetForDate } from "@/lib/game/dailyTarget";
@@ -48,6 +56,12 @@ import { buildAttemptResult } from "@/lib/population/score";
 import { track } from "@/lib/analytics/events";
 import type { PopulationEstimate } from "@/lib/population/types";
 import type { WorkerResponse } from "@/workers/population.worker";
+import {
+  generateWorldTarget,
+  worldTargetFromSearch,
+  dailyWorldTargetForDate,
+} from "@/lib/game/worldTarget";
+import type { MapRegion } from "./SpainMap";
 
 const SpainMap = dynamic(
   () => import("./SpainMap").then((m) => m.SpainMap),
@@ -55,7 +69,7 @@ const SpainMap = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex h-full items-center justify-center text-sm text-muted">
-        Cargando mapa…
+        Loading map…
       </div>
     ),
   },
@@ -63,7 +77,25 @@ const SpainMap = dynamic(
 
 type DailyInfo = { date: string; challengeNumber: number };
 
-export function Game() {
+type GameProps = {
+  /** España (por defecto) o el mundo entero: cambia mapa, datos y objetivos. */
+  region?: MapRegion;
+  /** Modo con el que arrancar (lo decide la página que contiene el juego). */
+  initialMode?: GameMode;
+  /** Si se indica, el selector muestra también Guess y More or Less. */
+  onOtherMode?: (mode: "guess" | "duel") => void;
+};
+
+export function Game({ region = "es", initialMode: forcedMode, onOtherMode }: GameProps) {
+  const [round, setRound] = useState<Round | null>(null);
+  const [roundKey, setRoundKey] = useState(0);
+  const isWorld = region === "world";
+  // Espacio de nombres del almacenamiento local: el récord, la racha y el
+  // diario del modo Mundo no se mezclan con los de España.
+  const ns = isWorld ? "world:" : "";
+  const newTarget = isWorld ? generateWorldTarget : generateTarget;
+  const readUrlTarget = isWorld ? worldTargetFromSearch : targetFromSearch;
+  const dailyTarget = isWorld ? dailyWorldTargetForDate : dailyTargetForDate;
   const [state, dispatch] = useReducer(reducer, initialState(0));
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<GameMode>("daily");
@@ -119,10 +151,19 @@ export function Game() {
     setDailyLocked(value);
   }, []);
 
-  const loadPracticeSession = useCallback((urlTarget: number | null) => {
-    const target = urlTarget ?? generateTarget();
-    if (!urlTarget) {
-      window.history.replaceState(null, "", targetToSearch(target));
+  const loadPracticeSession = useCallback((urlTarget: number | null, urlRound: Round | null = null) => {
+    let target: number;
+    if (isWorld) {
+      const r = urlRound ?? randomRound();
+      setRound(r);
+      setRoundKey((k) => k + 1);
+      target = r.target;
+      window.history.replaceState(null, "", roundToSearch(r));
+    } else {
+      target = urlTarget ?? newTarget();
+      if (!urlTarget) {
+        window.history.replaceState(null, "", targetToSearch(target));
+      }
     }
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
@@ -131,27 +172,34 @@ export function Game() {
     dispatch({
       type: "new-target",
       target,
-      best: loadBest(target),
-      attempts: loadAttemptCount(target),
+      best: loadBest(target, undefined, ns),
+      attempts: loadAttemptCount(target, undefined, ns),
     });
     track({ name: "game_started", target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDailyLockedSynced]);
 
   const loadDailySession = useCallback(() => {
-    const date = todayInMadrid();
+    const date = todayUtc();
     const challengeNumber = challengeNumberForDate(date);
-    const target = dailyTargetForDate(date);
-    const saved = loadDailyResult(date);
+    let target = dailyTarget(date);
+    if (isWorld) {
+      const r = dailyRound(date);
+      setRound(r);
+      setRoundKey((k) => k + 1);
+      target = r.target;
+    }
+    const saved = loadDailyResult(date, undefined, ns);
 
     setDailyInfo({ date, challengeNumber });
-    setStreak(loadStreak());
+    setStreak(loadStreak(undefined, ns));
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
 
     if (saved) {
       setDailyLockedSynced(true);
       setDailyGeometry(saved.geometry);
-      setDailyCountdown(msUntilNextMadridMidnight());
+      setDailyCountdown(msUntilNextUtcMidnight());
       dispatch({
         type: "new-target",
         target,
@@ -176,17 +224,22 @@ export function Game() {
       });
     }
     track({ name: "game_started", target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDailyLockedSynced]);
 
   // Modo y objetivo iniciales: un enlace con ?objetivo= implica Práctica
   // (enlace compartido); si no, se respeta el modo guardado o Diario por
   // defecto. Se fija en el cliente.
   useEffect(() => {
-    const urlTarget = targetFromSearch(window.location.search);
-    const initialMode: GameMode = urlTarget != null ? "practice" : loadMode() ?? "daily";
+    const urlRound = isWorld ? roundFromSearch(window.location.search) : null;
+    const urlTarget = isWorld ? urlRound?.target ?? null : readUrlTarget(window.location.search);
+    const saved = loadMode();
+    const savedDraw: GameMode | null = saved === "daily" || saved === "practice" ? saved : null;
+    const initialMode: GameMode =
+      urlTarget != null ? "practice" : forcedMode ?? savedDraw ?? "daily";
     setMode(initialMode);
     if (initialMode === "practice") {
-      loadPracticeSession(urlTarget);
+      loadPracticeSession(urlTarget, urlRound);
     } else {
       loadDailySession();
     }
@@ -209,12 +262,12 @@ export function Game() {
         contributions: estimate.contributingMunicipalities,
         completedAt: new Date().toISOString(),
       };
-      saveDailyResult(dailyResult);
-      const nextStreak = recordPlayed(info.date);
+      saveDailyResult(dailyResult, undefined, ns);
+      const nextStreak = recordPlayed(info.date, undefined, ns);
       setStreak(nextStreak);
       setDailyGeometry(geometry);
       setDailyLockedSynced(true);
-      setDailyCountdown(msUntilNextMadridMidnight());
+      setDailyCountdown(msUntilNextUtcMidnight());
       track({
         name: "daily_attempt_confirmed",
         target,
@@ -232,8 +285,8 @@ export function Game() {
       return;
     }
 
-    const attempts = incrementAttemptCount(target);
-    const improved = saveIfBest(result);
+    const attempts = incrementAttemptCount(target, undefined, ns);
+    const improved = saveIfBest(result, undefined, ns);
     setIsNewBest(improved);
     if (improved) {
       track({ name: "best_score_improved", target, score: result.score });
@@ -249,8 +302,9 @@ export function Game() {
       result,
       contributions: estimate.contributingMunicipalities,
       attempts,
-      best: loadBest(target),
+      best: loadBest(target, undefined, ns),
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDailyLockedSynced]);
 
   // Web Worker de cálculo
@@ -265,7 +319,7 @@ export function Game() {
         dispatch({
           type: "data-error",
           message:
-            "Los datos de población están tardando demasiado. Revisa tu conexión y recarga la página.",
+            "The population data is taking too long. Check your connection and reload the page.",
         });
       }
     }, 45_000);
@@ -291,11 +345,11 @@ export function Game() {
       window.clearTimeout(timeout);
       dispatch({
         type: "data-error",
-        message: "El módulo de cálculo no ha podido iniciarse.",
+        message: "The calculation engine couldn't start. Reload the page.",
       });
     };
 
-    worker.postMessage({ type: "init" });
+    worker.postMessage({ type: "init", region });
 
     return () => {
       window.clearTimeout(timeout);
@@ -330,7 +384,7 @@ export function Game() {
   const handleCheck = useCallback(() => {
     if (state.phase === "checking") return; // evita doble envío
     const geometry = selectionRef.current;
-    const validation = validateSelection(geometry);
+    const validation = validateSelection(geometry, region);
     if (!validation.ok) {
       setValidationMessage(validation.message);
       return;
@@ -343,7 +397,7 @@ export function Game() {
     }
 
     runCheck(geometry as Polygon | MultiPolygon);
-  }, [state.phase, mode, runCheck]);
+  }, [state.phase, mode, runCheck, region]);
 
   const handleDailyConfirm = useCallback(() => {
     setShowDailyConfirm(false);
@@ -363,22 +417,39 @@ export function Game() {
   }, []);
 
   const handleNewTarget = useCallback(() => {
-    const target = generateTarget();
-    window.history.replaceState(null, "", targetToSearch(target));
+    let target: number;
+    if (isWorld) {
+      const r = randomRound();
+      setRound(r);
+      setRoundKey((k) => k + 1);
+      target = r.target;
+      window.history.replaceState(null, "", roundToSearch(r));
+    } else {
+      target = newTarget();
+      window.history.replaceState(null, "", targetToSearch(target));
+    }
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
     dispatch({
       type: "new-target",
       target,
-      best: loadBest(target),
-      attempts: loadAttemptCount(target),
+      best: loadBest(target, undefined, ns),
+      attempts: loadAttemptCount(target, undefined, ns),
     });
     track({ name: "new_target", target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleModeChange = useCallback(
-    (next: GameMode) => {
-      if (next === mode || state.phase === "checking") return;
+    (picked: AnyMode) => {
+      if (picked === mode || state.phase === "checking") return;
+      if (picked === "guess" || picked === "duel") {
+        saveMode(picked);
+        window.history.replaceState(null, "", window.location.pathname);
+        onOtherMode?.(picked);
+        return;
+      }
+      const next: GameMode = picked;
       setMode(next);
       saveMode(next);
       setShowDailyConfirm(false);
@@ -390,7 +461,7 @@ export function Game() {
         loadDailySession();
       }
     },
-    [mode, state.phase, loadPracticeSession, loadDailySession],
+    [mode, state.phase, loadPracticeSession, loadDailySession, onOtherMode],
   );
 
   const checking = state.phase === "checking";
@@ -401,13 +472,18 @@ export function Game() {
     <div className="flex h-dvh flex-col">
       <GameHeader />
       <div className="px-4 pt-1 [@media(max-height:380px)]:pt-0.5">
-        <ModeSwitch mode={mode} onChange={handleModeChange} />
+        {onOtherMode ? (
+          <ModeSwitch<AnyMode> mode={mode} onChange={handleModeChange} options={ALL_MODE_OPTIONS} />
+        ) : (
+          <ModeSwitch<AnyMode> mode={mode} onChange={handleModeChange} />
+        )}
       </div>
       {mounted && state.target > 0 ? (
         <TargetDisplay
           target={state.target}
           onNewTarget={isDaily ? undefined : handleNewTarget}
           dailyChallengeNumber={isDaily ? dailyInfo?.challengeNumber : undefined}
+          regionName={isWorld ? round?.region.name : undefined}
         />
       ) : (
         <div className="flex flex-col items-center px-4 pb-2 pt-1 [@media(max-height:380px)]:pb-1 [@media(max-height:380px)]:pt-0.5">
@@ -422,11 +498,14 @@ export function Game() {
 
       <main className="relative min-h-0 flex-1">
         <SpainMap
+          region={region}
           onSelectionChange={handleSelectionChange}
           resetSignal={resetSignal}
           disabled={checking || state.phase === "data-error" || (isDaily && dailyLocked)}
-          showDensityToggle={Boolean(showResult)}
+          showDensityToggle={Boolean(showResult) && !isWorld}
           lockedGeometry={isDaily && dailyLocked ? dailyGeometry : null}
+          focusBounds={isWorld ? round?.region.bounds ?? null : null}
+          focusKey={isWorld ? roundKey : undefined}
         />
 
         {/* Estado de carga de datos */}
@@ -435,21 +514,21 @@ export function Game() {
             className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-line bg-white/95 px-3 py-1.5 text-xs text-muted shadow-sm"
             role="status"
           >
-            Cargando datos de población…
+            Loading population data…
           </div>
         )}
 
         {/* Error de datos */}
         {state.phase === "data-error" && (
           <div className="absolute inset-x-4 top-4 mx-auto max-w-md rounded-xl border border-line bg-white p-4 text-sm shadow-lg">
-            <p className="font-medium">No se han podido cargar los datos</p>
+            <p className="font-medium">Couldn&apos;t load the data</p>
             <p className="mt-1 text-muted">{state.errorMessage}</p>
             <button
               type="button"
               onClick={() => window.location.reload()}
               className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-deep"
             >
-              Recargar
+              Reload
             </button>
           </div>
         )}
@@ -474,7 +553,7 @@ export function Game() {
               data-testid="check-button"
               className="pointer-events-auto w-full max-w-sm rounded-[15px] bg-accent px-6 py-3.5 font-display text-base font-bold uppercase tracking-wide text-white shadow-btn transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {checking ? "Calculando…" : "Comprobar"}
+              {checking ? "Counting…" : "Check"}
             </button>
           </div>
         )}

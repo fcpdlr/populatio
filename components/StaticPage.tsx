@@ -10,7 +10,7 @@ export function StaticPage({
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
       <Link href="/" className="text-sm text-accent hover:text-accent-deep">
-        ← Volver al juego
+        ← Back to the game
       </Link>
       <h1 className="mt-4 font-display text-3xl font-extrabold tracking-tight">
         {title}

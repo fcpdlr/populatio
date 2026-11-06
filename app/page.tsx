@@ -1,5 +1,5 @@
-import { Game } from "@/components/game/Game";
+import { WorldHome } from "@/components/game/WorldHome";
 
 export default function HomePage() {
-  return <Game />;
+  return <WorldHome />;
 }

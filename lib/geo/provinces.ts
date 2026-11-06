@@ -14,7 +14,7 @@ export function loadProvinceLines(): Promise<ProvinceGeometries> {
   if (!cached) {
     cached = fetch("/provincias.geojson")
       .then((res) => {
-        if (!res.ok) throw new Error("No se ha podido cargar el contorno de provincias.");
+        if (!res.ok) throw new Error("Couldn't load the province outlines.");
         return res.json();
       })
       .then((geojson: FeatureCollection<Polygon | MultiPolygon>) =>

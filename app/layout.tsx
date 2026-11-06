@@ -22,9 +22,9 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "populat.io — rodea la población de España",
+  title: "populat.io — draw the population",
   description:
-    "Te damos una cifra de habitantes. Rodea una zona en el mapa y acércate todo lo posible.",
+    "We give you a number of people. Draw a zone anywhere on Earth that holds exactly that many.",
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },
@@ -46,7 +46,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${bricolage.variable} ${inter.variable}`}>
+    <html lang="en" className={`${bricolage.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );

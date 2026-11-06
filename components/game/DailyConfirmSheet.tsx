@@ -10,14 +10,14 @@ export function DailyConfirmSheet({ onConfirm, onKeepAdjusting }: Props) {
     <section
       role="alertdialog"
       aria-modal="true"
-      aria-label="Confirmar el único intento de hoy"
+      aria-label="Confirm today’s only attempt"
       data-testid="daily-confirm-sheet"
       className="pointer-events-auto w-full rounded-t-2xl border border-line bg-white p-5 shadow-[0_-4px_24px_rgb(0_0_0/0.08)] sm:max-w-sm sm:rounded-2xl sm:shadow-lg"
     >
-      <p className="text-sm font-semibold text-ink">Es tu único intento de hoy</p>
+      <p className="text-sm font-semibold text-ink">This is your only attempt today</p>
       <p className="mt-1.5 text-sm text-muted">
-        En el modo Diario solo se comprueba una vez. Al confirmar, tu selección
-        queda fija: no podrás volver a intentarlo hasta el próximo reto.
+        The daily challenge is checked once. When you confirm, your zone is
+        locked and you can&apos;t try again until the next challenge.
       </p>
       <div className="mt-4 flex gap-2">
         <button
@@ -25,7 +25,7 @@ export function DailyConfirmSheet({ onConfirm, onKeepAdjusting }: Props) {
           onClick={onKeepAdjusting}
           className="flex-1 rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
         >
-          Seguir ajustando
+          Keep adjusting
         </button>
         <button
           type="button"
@@ -33,7 +33,7 @@ export function DailyConfirmSheet({ onConfirm, onKeepAdjusting }: Props) {
           data-testid="daily-confirm-button"
           className="flex-1 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-deep"
         >
-          Confirmar intento
+          Confirm
         </button>
       </div>
     </section>
