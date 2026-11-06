@@ -10,7 +10,7 @@ unidad mínima es la **celda de una rejilla de población** de ~1 km de lado.
 
 ## Modo Mundo (`/`, por defecto)
 
-La web es global y en inglés: `/` es el mundo y España queda en `/spain`.
+La web es global y en inglés: `/` es el mundo. El modo España sigue en el código (`<Game region="es" />`) pero sin ruta publicada por ahora.
 El reto diario cambia a medianoche UTC, igual para todo el planeta.
 
 El mismo juego sobre todo el planeta, con la rejilla **GHS-POP 2025** de la
