@@ -25,10 +25,11 @@ const DEFAULT_STREAK: StreakData = { current: 0, best: 0, lastPlayedDate: null }
 export function loadDailyResult(
   date: string,
   storage: StorageLike | null = safeStorage(),
+  ns = "",
 ): DailyResult | null {
   if (!storage) return null;
   try {
-    const raw = storage.getItem(RESULT_PREFIX + date);
+    const raw = storage.getItem(RESULT_PREFIX + ns + date);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DailyResult;
     if (typeof parsed?.score !== "number" || parsed.date !== date) return null;
@@ -41,19 +42,23 @@ export function loadDailyResult(
 export function saveDailyResult(
   result: DailyResult,
   storage: StorageLike | null = safeStorage(),
+  ns = "",
 ): void {
   if (!storage) return;
   try {
-    storage.setItem(RESULT_PREFIX + result.date, JSON.stringify(result));
+    storage.setItem(RESULT_PREFIX + ns + result.date, JSON.stringify(result));
   } catch {
     /* almacenamiento lleno o bloqueado: seguimos sin persistir */
   }
 }
 
-export function loadStreak(storage: StorageLike | null = safeStorage()): StreakData {
+export function loadStreak(
+  storage: StorageLike | null = safeStorage(),
+  ns = "",
+): StreakData {
   if (!storage) return DEFAULT_STREAK;
   try {
-    const raw = storage.getItem(STREAK_KEY);
+    const raw = storage.getItem(STREAK_KEY + (ns ? ":" + ns : ""));
     if (!raw) return DEFAULT_STREAK;
     const parsed = JSON.parse(raw) as Partial<StreakData>;
     return {
@@ -67,10 +72,10 @@ export function loadStreak(storage: StorageLike | null = safeStorage()): StreakD
   }
 }
 
-function saveStreak(streak: StreakData, storage: StorageLike | null): void {
+function saveStreak(streak: StreakData, storage: StorageLike | null, ns = ""): void {
   if (!storage) return;
   try {
-    storage.setItem(STREAK_KEY, JSON.stringify(streak));
+    storage.setItem(STREAK_KEY + (ns ? ":" + ns : ""), JSON.stringify(streak));
   } catch {
     /* almacenamiento lleno o bloqueado: seguimos sin persistir */
   }
@@ -84,8 +89,9 @@ function saveStreak(streak: StreakData, storage: StorageLike | null): void {
 export function recordPlayed(
   date: string,
   storage: StorageLike | null = safeStorage(),
+  ns = "",
 ): StreakData {
-  const streak = loadStreak(storage);
+  const streak = loadStreak(storage, ns);
   if (streak.lastPlayedDate === date) return streak;
 
   const playedYesterday = streak.lastPlayedDate === previousDateString(date);
@@ -95,6 +101,6 @@ export function recordPlayed(
     best: Math.max(streak.best, current),
     lastPlayedDate: date,
   };
-  saveStreak(next, storage);
+  saveStreak(next, storage, ns);
   return next;
 }

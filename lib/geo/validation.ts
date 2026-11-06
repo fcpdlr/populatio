@@ -31,6 +31,7 @@ function fail(error: ValidationError): ValidationResult {
 
 export function validateSelection(
   geometry: Polygon | MultiPolygon | null | undefined,
+  region: "es" | "world" = "es",
 ): ValidationResult {
   if (!geometry) return fail("empty");
 
@@ -50,6 +51,8 @@ export function validateSelection(
   const feature = { type: "Feature" as const, properties: {}, geometry };
 
   if (area(feature) < MIN_AREA_M2) return fail("too-small");
+
+  if (region === "world") return { ok: true };
 
   const [minLng, minLat, maxLng, maxLat] = SPAIN_BBOX;
   const intersectsSpainBbox = polygons.some((rings) =>

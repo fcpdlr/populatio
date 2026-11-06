@@ -48,6 +48,12 @@ import { buildAttemptResult } from "@/lib/population/score";
 import { track } from "@/lib/analytics/events";
 import type { PopulationEstimate } from "@/lib/population/types";
 import type { WorkerResponse } from "@/workers/population.worker";
+import {
+  generateWorldTarget,
+  worldTargetFromSearch,
+  dailyWorldTargetForDate,
+} from "@/lib/game/worldTarget";
+import type { MapRegion } from "./SpainMap";
 
 const SpainMap = dynamic(
   () => import("./SpainMap").then((m) => m.SpainMap),
@@ -63,7 +69,19 @@ const SpainMap = dynamic(
 
 type DailyInfo = { date: string; challengeNumber: number };
 
-export function Game() {
+type GameProps = {
+  /** España (por defecto) o el mundo entero: cambia mapa, datos y objetivos. */
+  region?: MapRegion;
+};
+
+export function Game({ region = "es" }: GameProps) {
+  const isWorld = region === "world";
+  // Espacio de nombres del almacenamiento local: el récord, la racha y el
+  // diario del modo Mundo no se mezclan con los de España.
+  const ns = isWorld ? "world:" : "";
+  const newTarget = isWorld ? generateWorldTarget : generateTarget;
+  const readUrlTarget = isWorld ? worldTargetFromSearch : targetFromSearch;
+  const dailyTarget = isWorld ? dailyWorldTargetForDate : dailyTargetForDate;
   const [state, dispatch] = useReducer(reducer, initialState(0));
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<GameMode>("daily");
@@ -120,7 +138,7 @@ export function Game() {
   }, []);
 
   const loadPracticeSession = useCallback((urlTarget: number | null) => {
-    const target = urlTarget ?? generateTarget();
+    const target = urlTarget ?? newTarget();
     if (!urlTarget) {
       window.history.replaceState(null, "", targetToSearch(target));
     }
@@ -131,20 +149,21 @@ export function Game() {
     dispatch({
       type: "new-target",
       target,
-      best: loadBest(target),
-      attempts: loadAttemptCount(target),
+      best: loadBest(target, undefined, ns),
+      attempts: loadAttemptCount(target, undefined, ns),
     });
     track({ name: "game_started", target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDailyLockedSynced]);
 
   const loadDailySession = useCallback(() => {
     const date = todayInMadrid();
     const challengeNumber = challengeNumberForDate(date);
-    const target = dailyTargetForDate(date);
-    const saved = loadDailyResult(date);
+    const target = dailyTarget(date);
+    const saved = loadDailyResult(date, undefined, ns);
 
     setDailyInfo({ date, challengeNumber });
-    setStreak(loadStreak());
+    setStreak(loadStreak(undefined, ns));
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
 
@@ -176,13 +195,14 @@ export function Game() {
       });
     }
     track({ name: "game_started", target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDailyLockedSynced]);
 
   // Modo y objetivo iniciales: un enlace con ?objetivo= implica Práctica
   // (enlace compartido); si no, se respeta el modo guardado o Diario por
   // defecto. Se fija en el cliente.
   useEffect(() => {
-    const urlTarget = targetFromSearch(window.location.search);
+    const urlTarget = readUrlTarget(window.location.search);
     const initialMode: GameMode = urlTarget != null ? "practice" : loadMode() ?? "daily";
     setMode(initialMode);
     if (initialMode === "practice") {
@@ -209,8 +229,8 @@ export function Game() {
         contributions: estimate.contributingMunicipalities,
         completedAt: new Date().toISOString(),
       };
-      saveDailyResult(dailyResult);
-      const nextStreak = recordPlayed(info.date);
+      saveDailyResult(dailyResult, undefined, ns);
+      const nextStreak = recordPlayed(info.date, undefined, ns);
       setStreak(nextStreak);
       setDailyGeometry(geometry);
       setDailyLockedSynced(true);
@@ -232,8 +252,8 @@ export function Game() {
       return;
     }
 
-    const attempts = incrementAttemptCount(target);
-    const improved = saveIfBest(result);
+    const attempts = incrementAttemptCount(target, undefined, ns);
+    const improved = saveIfBest(result, undefined, ns);
     setIsNewBest(improved);
     if (improved) {
       track({ name: "best_score_improved", target, score: result.score });
@@ -249,8 +269,9 @@ export function Game() {
       result,
       contributions: estimate.contributingMunicipalities,
       attempts,
-      best: loadBest(target),
+      best: loadBest(target, undefined, ns),
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDailyLockedSynced]);
 
   // Web Worker de cálculo
@@ -295,7 +316,7 @@ export function Game() {
       });
     };
 
-    worker.postMessage({ type: "init" });
+    worker.postMessage({ type: "init", region });
 
     return () => {
       window.clearTimeout(timeout);
@@ -330,7 +351,7 @@ export function Game() {
   const handleCheck = useCallback(() => {
     if (state.phase === "checking") return; // evita doble envío
     const geometry = selectionRef.current;
-    const validation = validateSelection(geometry);
+    const validation = validateSelection(geometry, region);
     if (!validation.ok) {
       setValidationMessage(validation.message);
       return;
@@ -343,7 +364,7 @@ export function Game() {
     }
 
     runCheck(geometry as Polygon | MultiPolygon);
-  }, [state.phase, mode, runCheck]);
+  }, [state.phase, mode, runCheck, region]);
 
   const handleDailyConfirm = useCallback(() => {
     setShowDailyConfirm(false);
@@ -363,17 +384,18 @@ export function Game() {
   }, []);
 
   const handleNewTarget = useCallback(() => {
-    const target = generateTarget();
+    const target = newTarget();
     window.history.replaceState(null, "", targetToSearch(target));
     selectionRef.current = null;
     setResetSignal((n) => n + 1);
     dispatch({
       type: "new-target",
       target,
-      best: loadBest(target),
-      attempts: loadAttemptCount(target),
+      best: loadBest(target, undefined, ns),
+      attempts: loadAttemptCount(target, undefined, ns),
     });
     track({ name: "new_target", target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleModeChange = useCallback(
@@ -399,7 +421,7 @@ export function Game() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <GameHeader />
+      <GameHeader region={region} />
       <div className="px-4 pt-1 [@media(max-height:380px)]:pt-0.5">
         <ModeSwitch mode={mode} onChange={handleModeChange} />
       </div>
@@ -422,10 +444,11 @@ export function Game() {
 
       <main className="relative min-h-0 flex-1">
         <SpainMap
+          region={region}
           onSelectionChange={handleSelectionChange}
           resetSignal={resetSignal}
           disabled={checking || state.phase === "data-error" || (isDaily && dailyLocked)}
-          showDensityToggle={Boolean(showResult)}
+          showDensityToggle={Boolean(showResult) && !isWorld}
           lockedGeometry={isDaily && dailyLocked ? dailyGeometry : null}
         />
 

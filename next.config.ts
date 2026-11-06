@@ -10,6 +10,12 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/world/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+        ],
+      },
+      {
         source: "/rejilla.bin",
         headers: [
           { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },

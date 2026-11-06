@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Feature, Polygon, MultiPolygon } from "geojson";
+import type { Feature, Polygon, MultiPolygon, MultiLineString } from "geojson";
 import simplify from "@turf/simplify";
 import { DrawingControls } from "./DrawingControls";
 import { cleanPolygon } from "@/lib/geo/clean";
 import { loadDensityGrid, type DensityGrid } from "@/lib/population/densityGrid";
 import { loadProvinceLines, type ProvinceGeometries } from "@/lib/geo/provinces";
 
+export type MapRegion = "es" | "world";
+
 export type SpainMapProps = {
+  /** Territorio del mapa: España (por defecto) o el mundo entero. */
+  region?: MapRegion;
   /** Se invoca con la geometría dibujada, o null si no hay selección. */
   onSelectionChange: (geometry: Polygon | MultiPolygon | null) => void;
   /** Incrementa este valor para borrar la selección desde fuera. */
@@ -54,6 +58,37 @@ const VIEWS = {
   ],
 } satisfies Record<string, Bounds>;
 
+const WORLD_VIEWS = {
+  mundo: [
+    [-168, -56],
+    [178, 74],
+  ],
+  europa: [
+    [-11, 35],
+    [32, 60],
+  ],
+  asia: [
+    [60, -8],
+    [145, 50],
+  ],
+  africa: [
+    [-19, -35],
+    [52, 37],
+  ],
+  america: [
+    [-125, -55],
+    [-34, 50],
+  ],
+} satisfies Record<string, Bounds>;
+
+const WORLD_VIEW_BUTTONS: { key: keyof typeof WORLD_VIEWS; label: string }[] = [
+  { key: "mundo", label: "Mundo" },
+  { key: "europa", label: "Europa" },
+  { key: "asia", label: "Asia" },
+  { key: "africa", label: "África" },
+  { key: "america", label: "América" },
+];
+
 const VIEW_BUTTONS: { key: keyof typeof VIEWS; label: string }[] = [
   { key: "peninsula", label: "Península" },
   { key: "baleares", label: "Baleares" },
@@ -70,8 +105,40 @@ const GOTO_DURATION_MS = 500;
 const MIN_PINCH_DISTANCE_PX = 1;
 const MIN_SCALE_FACTOR = 0.6; // respecto al ajuste inicial a la península
 const MAX_SCALE_FACTOR = 35;
+const WORLD_MIN_SCALE_FACTOR = 0.9; // respecto al mapa mundial completo
+const WORLD_MAX_SCALE_FACTOR = 450; // permite dibujar a escala de ciudad
 
-type Camera = { centerLng: number; centerLat: number; scale: number };
+/**
+ * `k` es la corrección de aspecto (cos de la latitud de referencia): fija
+ * para España; en el mundo sigue a la latitud del centro de la vista, para
+ * que cada zona se vea con proporciones razonables al acercarse.
+ */
+type Camera = { centerLng: number; centerLat: number; scale: number; k: number };
+
+function kFor(region: MapRegion, lat: number): number {
+  if (region === "es") return REF_COS_LAT;
+  const clamped = Math.max(-60, Math.min(60, lat));
+  return Math.cos((clamped * Math.PI) / 180);
+}
+
+type WorldMap = {
+  land: MultiPolygon;
+  borders: MultiLineString;
+  /** bbox [minLng, minLat, maxLng, maxLat] de cada polígono de tierra, para no pintar lo que no se ve. */
+  landBoxes: [number, number, number, number][];
+  borderBoxes: [number, number, number, number][];
+};
+
+function boxOf(points: number[][]): [number, number, number, number] {
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  for (const [x, y] of points) {
+    if (x < a) a = x;
+    if (y < b) b = y;
+    if (x > c) c = x;
+    if (y > d) d = y;
+  }
+  return [a, b, c, d];
+}
 
 type ThemeColors = {
   paper: string;
@@ -126,20 +193,25 @@ function readThemeColors(): ThemeColors {
   };
 }
 
-function cameraForBounds(bounds: Bounds, width: number, height: number): Camera {
+function cameraForBounds(
+  bounds: Bounds,
+  width: number,
+  height: number,
+  region: MapRegion = "es",
+): Camera {
   const [[minLng, minLat], [maxLng, maxLat]] = bounds;
   const lngSpan = Math.max(maxLng - minLng, 1e-6);
   const latSpan = Math.max(maxLat - minLat, 1e-6);
   const availW = Math.max(width - VIEW_PADDING_PX * 2, 1);
   const availH = Math.max(height - VIEW_PADDING_PX * 2, 1);
-  const scale = Math.min(
-    availW / (lngSpan * REF_COS_LAT),
-    availH / latSpan,
-  );
+  const centerLat = (minLat + maxLat) / 2;
+  const k = kFor(region, centerLat);
+  const scale = Math.min(availW / (lngSpan * k), availH / latSpan);
   return {
     centerLng: (minLng + maxLng) / 2,
-    centerLat: (minLat + maxLat) / 2,
+    centerLat,
     scale,
+    k,
   };
 }
 
@@ -150,7 +222,7 @@ function project(
   lng: number,
   lat: number,
 ): [number, number] {
-  const x = width / 2 + (lng - camera.centerLng) * camera.scale * REF_COS_LAT;
+  const x = width / 2 + (lng - camera.centerLng) * camera.scale * camera.k;
   const y = height / 2 - (lat - camera.centerLat) * camera.scale;
   return [x, y];
 }
@@ -162,7 +234,7 @@ function unproject(
   x: number,
   y: number,
 ): LngLat {
-  const lng = camera.centerLng + (x - width / 2) / (camera.scale * REF_COS_LAT);
+  const lng = camera.centerLng + (x - width / 2) / (camera.scale * camera.k);
   const lat = camera.centerLat - (y - height / 2) / camera.scale;
   return [lng, lat];
 }
@@ -182,11 +254,13 @@ function cameraPinnedAt(
   worldLat: number,
   screenX: number,
   screenY: number,
+  k: number,
 ): Camera {
   return {
-    centerLng: worldLng - (screenX - width / 2) / (scale * REF_COS_LAT),
+    centerLng: worldLng - (screenX - width / 2) / (scale * k),
     centerLat: worldLat - (height / 2 - screenY) / scale,
     scale,
+    k,
   };
 }
 
@@ -217,6 +291,7 @@ function easeInOutQuad(t: number): number {
 }
 
 export function SpainMap({
+  region = "es",
   onSelectionChange,
   resetSignal = 0,
   disabled = false,
@@ -227,7 +302,9 @@ export function SpainMap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
-  const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1 });
+  const cameraRef = useRef<Camera>({ centerLng: -3.7, centerLat: 40, scale: 1, k: REF_COS_LAT });
+  const worldRef = useRef<WorldMap | null>(null);
+  const isWorld = region === "world";
   const baseScaleRef = useRef(1);
   const pointersRef = useRef<Map<number, PointerPoint>>(new Map());
   const pinchRef = useRef<{ distance: number; midX: number; midY: number } | null>(null);
@@ -279,22 +356,59 @@ export function SpainMap({
     ctx.fillStyle = colors.mapSea;
     ctx.fillRect(0, 0, width, height);
 
-    // Contorno de España (tierra en gris cálido neutro; el teal se reserva
+    // Límites visibles (con margen) para descartar geometría fuera de pantalla.
+    const [vLng0, vLat0] = unproject(camera, width, height, -40, height + 40);
+    const [vLng1, vLat1] = unproject(camera, width, height, width + 40, -40);
+    const visible = (b: [number, number, number, number]) =>
+      b[2] >= vLng0 && b[0] <= vLng1 && b[3] >= vLat0 && b[1] <= vLat1;
+
+    // Contorno de la tierra (gris cálido neutro; el teal se reserva
     // por completo para la selección del usuario)
+    const world = worldRef.current;
     ctx.beginPath();
-    for (const ring of ringsOf(outline.geometry)) {
-      ring.forEach(([lng, lat], idx) => {
-        const [x, y] = proj(lng, lat);
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+    if (world) {
+      world.land.coordinates.forEach((poly, i) => {
+        if (!visible(world.landBoxes[i])) return;
+        for (const ring of poly) {
+          ring.forEach(([lng, lat], idx) => {
+            const [x, y] = proj(lng, lat);
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.closePath();
+        }
       });
-      ctx.closePath();
+    } else {
+      for (const ring of ringsOf(outline.geometry)) {
+        ring.forEach(([lng, lat], idx) => {
+          const [x, y] = proj(lng, lat);
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+      }
     }
     ctx.fillStyle = colors.mapLand;
     ctx.fill("evenodd");
     ctx.strokeStyle = colors.mapLandLine;
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Fronteras entre países (solo en el mapa mundial)
+    if (world) {
+      ctx.beginPath();
+      world.borders.coordinates.forEach((line, i) => {
+        if (!visible(world.borderBoxes[i])) return;
+        line.forEach(([lng, lat], idx) => {
+          const [x, y] = proj(lng, lat);
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+      });
+      ctx.strokeStyle = colors.provinceLine;
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
+    }
 
     // Densidad de población (solo en el resultado, nunca durante el dibujo).
     // Se agrega la población en una rejilla de píxeles antes de pintar: así
@@ -459,12 +573,14 @@ export function SpainMap({
     const hadSize = sizeRef.current.width > 0;
     sizeRef.current = { width, height };
     if (!hadSize) {
-      const initialCamera = cameraForBounds(VIEWS.peninsula, width, height);
+      const initialCamera = isWorld
+        ? cameraForBounds(WORLD_VIEWS.mundo, width, height, "world")
+        : cameraForBounds(VIEWS.peninsula, width, height);
       cameraRef.current = initialCamera;
       baseScaleRef.current = initialCamera.scale;
     }
     draw();
-  }, [draw]);
+  }, [draw, isWorld]);
 
   const animateTo = useCallback(
     (target: Camera) => {
@@ -479,6 +595,7 @@ export function SpainMap({
           centerLng: start.centerLng + (target.centerLng - start.centerLng) * eased,
           centerLat: start.centerLat + (target.centerLat - start.centerLat) * eased,
           scale: start.scale + (target.scale - start.scale) * eased,
+          k: start.k + (target.k - start.k) * eased,
         };
         draw();
         animRef.current = t < 1 ? requestAnimationFrame(step) : null;
@@ -571,21 +688,34 @@ export function SpainMap({
     let cancelled = false;
     colorsRef.current = readThemeColors();
 
-    fetch("/data/spain-outline.geojson")
+    fetch(isWorld ? "/world/map.json" : "/data/spain-outline.geojson")
       .then((res) => {
         if (!res.ok) throw new Error("No se ha podido descargar el contorno.");
         return res.json();
       })
-      .then((geojson: Feature<Polygon | MultiPolygon>) => {
+      .then((data) => {
         if (cancelled) return;
-        outlineRef.current = geojson;
+        if (isWorld) {
+          const { land, borders } = data as { land: MultiPolygon; borders: MultiLineString };
+          worldRef.current = {
+            land,
+            borders,
+            landBoxes: land.coordinates.map((poly) => boxOf(poly[0])),
+            borderBoxes: borders.coordinates.map((line) => boxOf(line)),
+          };
+          outlineRef.current = { type: "Feature", properties: {}, geometry: land };
+        } else {
+          outlineRef.current = data as Feature<Polygon | MultiPolygon>;
+        }
         setMapReady(true);
         resize();
       })
       .catch(() => {
         if (!cancelled) {
           setMapError(
-            "No se ha podido cargar el mapa de España. Recarga la página.",
+            isWorld
+              ? "No se ha podido cargar el mapa del mundo. Recarga la página."
+              : "No se ha podido cargar el mapa de España. Recarga la página.",
           );
         }
       });
@@ -601,7 +731,7 @@ export function SpainMap({
   // siquiera aparece: no hay error que mostrar ni que quitar más tarde, solo
   // se activa solo cuando el fichero esté disponible.
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || isWorld) return;
     let cancelled = false;
     fetch("/provincias.geojson", { method: "HEAD" })
       .then((res) => {
@@ -614,6 +744,31 @@ export function SpainMap({
       cancelled = true;
     };
   }, []);
+
+  // Zoom con la rueda del ratón o el trackpad (escritorio), centrado en el
+  // cursor. Listener nativo no pasivo para poder evitar el scroll de página.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      if (disabledRef.current && !isWorld) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const { width, height } = sizeRef.current;
+      const camera = cameraRef.current;
+      const minScale = baseScaleRef.current * (isWorld ? WORLD_MIN_SCALE_FACTOR : MIN_SCALE_FACTOR);
+      const maxScale = baseScaleRef.current * (isWorld ? WORLD_MAX_SCALE_FACTOR : MAX_SCALE_FACTOR);
+      const newScale = Math.min(Math.max(camera.scale * Math.exp(-e.deltaY * 0.0015), minScale), maxScale);
+      const [lng, lat] = unproject(camera, width, height, x, y);
+      const pinned = cameraPinnedAt(width, height, newScale, lng, lat, x, y, camera.k);
+      cameraRef.current = isWorld ? { ...pinned, k: kFor("world", pinned.centerLat) } : pinned;
+      draw();
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, [draw, isWorld]);
 
   // Redimensionado del canvas al cambiar el tamaño del contenedor
   useEffect(() => {
@@ -746,11 +901,13 @@ export function SpainMap({
           const { width, height } = sizeRef.current;
           const camera = cameraRef.current;
           const rawScale = camera.scale * (state.distance / prev.distance);
-          const minScale = baseScaleRef.current * MIN_SCALE_FACTOR;
-          const maxScale = baseScaleRef.current * MAX_SCALE_FACTOR;
+          const minScale =
+            baseScaleRef.current * (isWorld ? WORLD_MIN_SCALE_FACTOR : MIN_SCALE_FACTOR);
+          const maxScale =
+            baseScaleRef.current * (isWorld ? WORLD_MAX_SCALE_FACTOR : MAX_SCALE_FACTOR);
           const newScale = Math.min(Math.max(rawScale, minScale), maxScale);
           const [worldLng, worldLat] = unproject(camera, width, height, prev.midX, prev.midY);
-          cameraRef.current = cameraPinnedAt(
+          const pinned = cameraPinnedAt(
             width,
             height,
             newScale,
@@ -758,7 +915,12 @@ export function SpainMap({
             worldLat,
             state.midX,
             state.midY,
+            camera.k,
           );
+          // En el mundo, la corrección de aspecto sigue a la latitud del centro.
+          cameraRef.current = isWorld
+            ? { ...pinned, k: kFor("world", pinned.centerLat) }
+            : pinned;
         }
         pinchRef.current = state;
         draw();
@@ -780,7 +942,7 @@ export function SpainMap({
       path.push(unproject(camera, width, height, x, y));
       draw();
     },
-    [draw, screenPointFromEvent],
+    [draw, screenPointFromEvent, isWorld],
   );
 
   const handlePointerUp = useCallback(
@@ -822,20 +984,30 @@ export function SpainMap({
   );
 
   const goTo = useCallback(
-    (view: keyof typeof VIEWS) => {
+    (view: string) => {
       const { width, height } = sizeRef.current;
       if (width <= 0 || height <= 0) return;
-      animateTo(cameraForBounds(VIEWS[view], width, height));
+      const bounds = isWorld
+        ? WORLD_VIEWS[view as keyof typeof WORLD_VIEWS]
+        : VIEWS[view as keyof typeof VIEWS];
+      if (!bounds) return;
+      animateTo(cameraForBounds(bounds, width, height, region));
     },
-    [animateTo],
+    [animateTo, isWorld, region],
   );
 
+  const viewButtons: { key: string; label: string }[] = isWorld ? WORLD_VIEW_BUTTONS : VIEW_BUTTONS;
+
   return (
-    <div className="relative h-full w-full" data-testid="spain-map">
+    <div className="relative h-full w-full" data-testid={isWorld ? "world-map" : "spain-map"}>
       <div ref={containerRef} className="h-full w-full">
         <canvas
           ref={canvasRef}
-          aria-label="Mapa de España. Arrastra con el dedo o el ratón para dibujar una zona."
+          aria-label={
+            isWorld
+              ? "Mapa del mundo. Arrastra con el dedo o el ratón para dibujar una zona; pellizca con dos dedos para acercarte."
+              : "Mapa de España. Arrastra con el dedo o el ratón para dibujar una zona."
+          }
           className="touch-none"
           style={{ display: "block", cursor: disabled ? "default" : "crosshair" }}
           onPointerDown={handlePointerDown}
@@ -912,7 +1084,7 @@ export function SpainMap({
             role="group"
             aria-label="Ir a un territorio"
           >
-            {VIEW_BUTTONS.map(({ key, label }) => (
+            {viewButtons.map(({ key, label }) => (
               <button
                 key={key}
                 type="button"

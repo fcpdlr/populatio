@@ -8,6 +8,26 @@ Cuanto más te acerques al objetivo, más puntos (0–1000).
 A pesar del nombre provisional, **el cálculo nunca usa provincias**: la
 unidad mínima es la **celda de una rejilla de población** de ~1 km de lado.
 
+## Modo Mundo (`/mundo`)
+
+El mismo juego sobre todo el planeta, con la rejilla **GHS-POP 2025** de la
+Comisión Europea (JRC), 1 km, proyección Mollweide de áreas iguales.
+
+- `public/world/tiles/` — teselas generadas en el repo `fcpdlr/populatio-data`
+  (GitHub Action): `index.json`, `1km/<fila>_<col>.bin.gz` (250×250 celdas) y
+  `world_10km.bin.gz` (el planeta a 10 km).
+- `public/world/map.json` — tierra y fronteras de Natural Earth 1:50m
+  (`npm run data:prepare-world-outline`).
+- `lib/population/worldEstimator.ts` — proyecta el polígono a Mollweide y suma
+  por filas las celdas cuyo centro cae dentro. Zonas pequeñas: 1 km (solo
+  descarga las teselas que tocan). Zonas grandes: 10 km.
+- Objetivos en escala logarítmica entre 1 y 300 millones
+  (`lib/game/worldTarget.ts`). Récords, rachas y diario se guardan aparte de
+  los de España.
+
+Atribución obligatoria: *GHS-POP R2023A, European Commission, Joint Research
+Centre*.
+
 ## Stack
 
 - **Next.js 15** (App Router) + **TypeScript estricto**
